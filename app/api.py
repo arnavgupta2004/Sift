@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -21,6 +21,7 @@ from sqlmodel import select
 from app.agent.graph import GraphState, get_compiled_graph, run_query
 from app.db import get_session
 from app.models import UserRecord
+from app.personalization.feedback import record_feedback
 from app.personalization.profile_builder import build_user_profile
 from app.personalization.temporal_patterns import current_context_boost, detect_recurring_patterns
 from app.tracing import RoutingTrace
@@ -46,6 +47,22 @@ def list_users():
 @app.post("/api/query")
 def query(req: QueryRequest):
     return run_query(req.query, req.user_id)
+
+
+class FeedbackRequest(BaseModel):
+    user_id: int
+    file_id: int
+    query: str
+    signal: str  # "thumbs_up" | "thumbs_down" | "opened"
+
+
+@app.post("/api/feedback")
+def feedback(req: FeedbackRequest):
+    try:
+        event = record_feedback(req.user_id, req.file_id, req.query, req.signal)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return {"id": event.id, "recorded": True}
 
 
 @app.get("/api/query/stream")

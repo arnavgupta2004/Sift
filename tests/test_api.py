@@ -45,6 +45,23 @@ class TestPersonalizationEndpoint:
         assert "active_context_boost_now" in body
 
 
+class TestFeedbackEndpoint:
+    def test_records_valid_feedback(self):
+        resp = client.post(
+            "/api/feedback",
+            json={"user_id": _first_user_id(), "file_id": 1, "query": "test query", "signal": "thumbs_up"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["recorded"] is True
+
+    def test_rejects_invalid_signal(self):
+        resp = client.post(
+            "/api/feedback",
+            json={"user_id": _first_user_id(), "file_id": 1, "query": "test query", "signal": "shrug"},
+        )
+        assert resp.status_code == 422
+
+
 class TestQueryStreamEndpoint:
     def test_stream_ends_with_done_event_containing_trace(self):
         with client.stream(

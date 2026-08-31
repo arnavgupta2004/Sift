@@ -20,6 +20,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from app.agent.graph import run_query  # noqa: E402
 from app.db import get_session  # noqa: E402
 from app.models import UserRecord  # noqa: E402
+from app.personalization.feedback import record_feedback  # noqa: E402
 from app.personalization.temporal_patterns import current_context_boost, detect_recurring_patterns  # noqa: E402
 from app.personalization.profile_builder import build_user_profile  # noqa: E402
 from sqlmodel import select  # noqa: E402
@@ -109,5 +110,9 @@ if run and query.strip():
             with c2:
                 st.metric("score", f"{r['score']:.3f}")
                 fb1, fb2 = st.columns(2)
-                fb1.button("👍", key=f"up-{r['file_id']}")
-                fb2.button("👎", key=f"down-{r['file_id']}")
+                if fb1.button("👍", key=f"up-{r['file_id']}"):
+                    record_feedback(selected_user_id, r["file_id"], query, "thumbs_up")
+                    st.toast(f"Recorded 👍 on {r['filename']}")
+                if fb2.button("👎", key=f"down-{r['file_id']}"):
+                    record_feedback(selected_user_id, r["file_id"], query, "thumbs_down")
+                    st.toast(f"Recorded 👎 on {r['filename']}")
