@@ -26,6 +26,7 @@ class RoutingTrace:
     tier: str = ""
     rationale: str = ""
     used_llm_fallback_classification: bool = False
+    used_learned_router: bool = False
     stages: list[StageTiming] = field(default_factory=list)
     llm_call_count: int = 0
 
@@ -53,6 +54,7 @@ class RoutingTrace:
             "tier": self.tier,
             "rationale": self.rationale,
             "used_llm_fallback_classification": self.used_llm_fallback_classification,
+            "used_learned_router": self.used_learned_router,
             "llm_call_count": self.llm_call_count,
             "total_duration_ms": round(self.total_duration_ms, 2),
             "stages": [

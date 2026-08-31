@@ -1,9 +1,13 @@
 """Three-tier complexity router — the centerpiece of Objective 3.
 
-Combines cheap rule-based signals (already extracted by query_understanding.py) with an
-LLM classification call used ONLY when those rules land in a genuinely ambiguous middle
-ground. That's a deliberate optimization, not a shortcut: eval/latency_comparison.py
-reports what fraction of queries in the labeled eval set never touch the LLM here.
+Combines cheap rule-based signals (already extracted by query_understanding.py) with a
+classification step used ONLY when those rules land in a genuinely ambiguous middle
+ground. That classification step is itself two-tiered: try the learned router first
+(app/agent/learned_router.py — a cheap classifier trained to approximate LLM judgment,
+zero LLM calls), and only call the real LLM when the learned router is unavailable or
+its confidence is below LOW_CONFIDENCE_THRESHOLD. eval/latency_comparison.py and
+eval/router_agreement.py report what fraction of queries ever reach each tier of this
+fallback chain.
 
 Tiers:
   fast     — exact filename match, or a simple type+date filter with no ambiguous
@@ -17,11 +21,13 @@ Tiers:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 from app.agent.query_understanding import QueryIntent
 
 FAST_MAX_WORDS_FOR_FILTER_ONLY = 9
 DEEP_MIN_WORDS = 14
+LOW_CONFIDENCE_THRESHOLD = 0.6
 
 
 @dataclass
@@ -29,6 +35,14 @@ class RouteDecision:
     tier: str  # "fast" | "standard" | "deep"
     rationale: str
     used_llm_fallback: bool = False
+    used_learned_router: bool = False
+
+
+@lru_cache(maxsize=1)
+def _get_learned_router():
+    from app.agent.learned_router import LearnedRouter
+
+    return LearnedRouter()
 
 
 def _llm_classify(intent: QueryIntent) -> RouteDecision | None:
@@ -89,12 +103,27 @@ def route(intent: QueryIntent) -> RouteDecision:
         return RouteDecision(tier="deep", rationale=f"{reason}, needs full hybrid+rerank+LLM reasoning")
 
     # Borderline: not an exact filename, not a clean filter query, not obviously vague
-    # or long either. This is the only case that pays for an LLM classification call.
+    # or long either. Try the learned router first (no LLM call); fall back to the
+    # real LLM only if it's unavailable or unconfident; fall back further to a
+    # rule-based default if neither is available.
+    learned = _get_learned_router()
+    if learned.is_available:
+        learned_decision = learned.classify(intent)
+        if learned_decision and learned_decision.confidence >= LOW_CONFIDENCE_THRESHOLD:
+            return RouteDecision(
+                tier=learned_decision.tier,
+                rationale=(
+                    f"learned router classification (confidence={learned_decision.confidence:.2f}), "
+                    "approximates LLM judgment without calling it"
+                ),
+                used_learned_router=True,
+            )
+
     llm_decision = _llm_classify(intent)
     if llm_decision:
         return llm_decision
 
     return RouteDecision(
         tier="standard",
-        rationale="moderately specific topical query; defaulted to standard (no LLM available for fallback classification)",
+        rationale="moderately specific topical query; defaulted to standard (no learned router or LLM available)",
     )

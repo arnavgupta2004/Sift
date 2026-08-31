@@ -65,6 +65,7 @@ def node_route(state: GraphState) -> dict:
     trace.tier = decision.tier
     trace.rationale = decision.rationale
     trace.used_llm_fallback_classification = decision.used_llm_fallback
+    trace.used_learned_router = decision.used_learned_router
     if decision.used_llm_fallback:
         trace.record_llm_call()
     return {"decision": decision}
