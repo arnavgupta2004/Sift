@@ -24,10 +24,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from app.agent.query_understanding import QueryIntent
-
-FAST_MAX_WORDS_FOR_FILTER_ONLY = 9
-DEEP_MIN_WORDS = 14
-LOW_CONFIDENCE_THRESHOLD = 0.6
+from app.config import DEEP_MIN_WORDS, FAST_MAX_WORDS_FOR_FILTER_ONLY, LOW_CONFIDENCE_THRESHOLD
 
 
 @dataclass

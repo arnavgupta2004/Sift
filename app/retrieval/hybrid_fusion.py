@@ -12,11 +12,12 @@ ranks so one list's #1 doesn't dominate irrecoverably.
 
 from __future__ import annotations
 
+from app.config import RRF_K
 from app.retrieval.base import ScoredFile
 
 
 def reciprocal_rank_fusion(
-    ranked_lists: list[list[ScoredFile]], k: int = 60, limit: int | None = None
+    ranked_lists: list[list[ScoredFile]], k: int = RRF_K, limit: int | None = None
 ) -> list[ScoredFile]:
     scores: dict[int, float] = {}
     contributing_sources: dict[int, list[str]] = {}

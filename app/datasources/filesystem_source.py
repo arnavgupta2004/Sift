@@ -16,10 +16,10 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from app.config import MAX_EXTRACTED_CONTENT_CHARS as MAX_CONTENT_CHARS
 from app.datasources.base import DataSource, RawFile
 
 TEXT_NATIVE_EXTENSIONS = {"txt", "md", "py", "json", "csv", "yaml", "yml", "js", "ts", "tsx", "jsx", "html", "css", "sh"}
-MAX_CONTENT_CHARS = 20_000
 DEFAULT_EXCLUDE_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", ".pytest_cache", "data"}
 
 

@@ -19,10 +19,9 @@ from functools import lru_cache
 
 from sqlmodel import select
 
+from app.config import N_CLUSTERS, RECENCY_HALF_LIFE_DAYS
 from app.db import get_session
 from app.models import AccessEvent, FileRecord
-
-N_CLUSTERS = 10
 
 
 @dataclass
@@ -68,7 +67,7 @@ def _normalize(counter: Counter) -> dict:
 
 
 def build_user_profile(
-    user_id: int, now: datetime | None = None, half_life_days: float = 14.0
+    user_id: int, now: datetime | None = None, half_life_days: float = RECENCY_HALF_LIFE_DAYS
 ) -> UserProfile:
     now = now or datetime.now()
 

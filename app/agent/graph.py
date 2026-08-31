@@ -18,6 +18,7 @@ from sqlmodel import select
 from app.agent.explain import generate_explanations
 from app.agent.query_understanding import QueryIntent, enrich_with_llm, extract_entities
 from app.agent.router import RouteDecision, route
+from app.config import CANDIDATE_POOL_SIZE, FINAL_RESULT_COUNT
 from app.db import get_session
 from app.models import FileRecord
 from app.personalization.personalized_ranker import WeightedSumPersonalizer
@@ -27,9 +28,6 @@ from app.retrieval.hybrid_fusion import reciprocal_rank_fusion
 from app.retrieval.metadata_search import MetadataFilters
 from app.retrieval.reranker import rerank
 from app.tracing import RoutingTrace
-
-CANDIDATE_POOL_SIZE = 20
-FINAL_RESULT_COUNT = 10
 
 
 class GraphState(TypedDict, total=False):

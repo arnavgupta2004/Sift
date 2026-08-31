@@ -31,23 +31,18 @@ from collections import defaultdict
 import numpy as np
 from sqlmodel import select
 
+from app.config import (
+    ACCESS_LOG_ROW_WEIGHT,
+    FEEDBACK_ROW_WEIGHT,
+    MAX_EVENTS_PER_USER,
+    N_NEGATIVES_OTHER_TOPIC,
+    N_NEGATIVES_SAME_TOPIC,
+)
 from app.db import get_session
 from app.models import AccessEvent, FeedbackEvent, FileRecord, UserRecord
 from app.personalization.features import featurize
 from app.personalization.profile_builder import build_user_profile, discover_topic_clusters
 from app.personalization.temporal_patterns import detect_recurring_patterns
-
-N_NEGATIVES_SAME_TOPIC = 3
-N_NEGATIVES_OTHER_TOPIC = 3
-MAX_EVENTS_PER_USER = 60
-
-# Feedback-derived rows are real, query-specific, explicit signal (a user directly
-# said "this was/wasn't relevant to this exact query"); access-log-derived rows are a
-# coarse same-topic/different-topic bootstrap. Weighting feedback higher is what makes
-# the feedback loop's effect visible after a realistic number of rounds instead of
-# being diluted by the much larger bootstrap set — see eval/feedback_loop_demo.py.
-ACCESS_LOG_ROW_WEIGHT = 1.0
-FEEDBACK_ROW_WEIGHT = 3.0
 
 
 def _get_all_embeddings() -> dict[int, np.ndarray]:
