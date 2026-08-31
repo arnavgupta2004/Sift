@@ -69,7 +69,6 @@ def write_xlsx(path: Path, rows: list[list[str]]) -> None:
 
 def write_pptx(path: Path, slides: list[dict]) -> None:
     from pptx import Presentation
-    from pptx.util import Inches
 
     prs = Presentation()
     title_layout = prs.slide_layouts[0]

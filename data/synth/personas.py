@@ -8,7 +8,7 @@ injected deliberately so temporal_patterns.py has something genuine to detect).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)

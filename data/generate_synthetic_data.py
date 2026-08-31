@@ -30,7 +30,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
-from app.models import AccessEvent, FileRecord, UserRecord  # noqa: E402
+from app.models import FileRecord, UserRecord  # noqa: E402
 from data.synth import content, corpus_writer  # noqa: E402
 from data.synth.access_log import simulate_access_log  # noqa: E402
 from data.synth.personas import PERSONAS  # noqa: E402
