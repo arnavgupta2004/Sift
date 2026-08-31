@@ -83,7 +83,7 @@ Two things worth knowing if you read the code:
 ## Repository layout
 
 ```
-Agentic-AI-Project/
+Sift/
 ├── data/
 │   ├── generate_synthetic_data.py  # single reproducible entry point (corpus + DB + access log)
 │   ├── synth/                      # topics, personas, content generation, access-log simulation
