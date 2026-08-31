@@ -81,3 +81,72 @@ jobs:
 
       - name: Type-check and build
         run: npm run build
+
+  docker:
+    # Proves docker-compose.yml actually boots the full stack (ollama + api + frontend)
+    # end to end, independent of any local machine — this is the only way this project
+    # verifies Docker at all, since local Docker Desktop is unavailable in this build
+    # environment. Runs on every push so this never silently rots.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the full stack
+        run: docker compose up -d --build
+
+      - name: Wait for the API to become reachable and healthy
+        run: |
+          echo "Polling http://localhost:8000/api/users (cold boot: ollama model pull +"
+          echo "corpus generation + embedding index builds can take several minutes)..."
+          deadline=$((SECONDS + 900))
+          until curl -sf http://localhost:8000/api/users -o /tmp/users_response.json; do
+            if [ $SECONDS -ge $deadline ]; then
+              echo "API did not become reachable within 15 minutes."
+              echo "--- docker compose ps ---"
+              docker compose ps
+              echo "--- docker compose logs ---"
+              docker compose logs
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "API responded after ${SECONDS}s."
+          cat /tmp/users_response.json
+
+      - name: Smoke test — API returns the seeded users
+        run: |
+          python3 -c "
+          import json
+          data = json.load(open('/tmp/users_response.json'))
+          assert isinstance(data, list) and len(data) == 3, f'expected 3 seeded users, got: {data}'
+          names = {u['name'] for u in data}
+          assert names == {'Priya Iyer', 'David Chen', 'Maria Santos'}, f'unexpected users: {names}'
+          print('OK — API is serving the real seeded corpus:', names)
+          "
+
+      - name: Smoke test — a real query round-trips end to end
+        run: |
+          curl -sf -X POST http://localhost:8000/api/query \
+            -H 'Content-Type: application/json' \
+            -d '{"query": "open gradient_descent_v2.md", "user_id": 1}' \
+            -o /tmp/query_response.json
+          python3 -c "
+          import json
+          data = json.load(open('/tmp/query_response.json'))
+          assert 'routing_trace' in data and 'results' in data, f'unexpected response shape: {data.keys()}'
+          print('OK — routed to tier:', data['routing_trace']['tier'], 'with', len(data['results']), 'results')
+          "
+
+      - name: Smoke test — frontend serves the app
+        run: curl -sf http://localhost:5173/ -o /dev/null -w "frontend HTTP %{http_code}\n"
+
+      - name: Show container status and logs on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

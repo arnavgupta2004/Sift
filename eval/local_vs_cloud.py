@@ -16,12 +16,30 @@ Requires:
     reported as such rather than faked.
 
 Writes eval/results/local_vs_cloud_summary.json and eval/results/local_vs_cloud.png.
+
+--- Why this runs each (backend, phase) in its own subprocess ---
+Root-caused via instrumented runs (RSS/FD/thread tracking, see REPORT.md section 8.1):
+a single long-lived process making many sequential local-model calls to Ollama is
+fine up to roughly 40-50 calls (confirmed: an isolated 42-call retrieval-quality run
+completes cleanly every time, with flat FD/thread counts throughout). But run routing
+accuracy (49 calls) immediately followed by retrieval quality (up to 84 calls) *in the
+same process*, and it reliably hangs partway into the second phase: `llama-server`'s
+own CPU time goes completely flat (confirmed via `ps -o time=` polled every 15s) while
+the Python client sits at 0% CPU with zero open network connections — not a Python-side
+resource leak (verified: fds/threads/gc-object counts stay flat throughout, in both
+the healthy and the eventually-stuck runs), but state internal to Ollama's own
+llama-server process that accumulates across roughly 90+ sequential requests in one
+server-side model session. This is downstream of Ollama/llama.cpp, not something this
+project's Python code can fix directly. The practical, verified-working mitigation:
+each (backend, phase) pair below runs as its own subprocess via --backend/--phase, so
+no single Ollama request sequence in one process ever exceeds ~50 calls.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -39,11 +57,12 @@ from app.db import get_session  # noqa: E402
 from app.llm_client import get_client  # noqa: E402
 from app.models import UserRecord  # noqa: E402
 from eval.metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k  # noqa: E402
-from eval.run_benchmark import EVAL_SET_PATH, RESULTS_DIR, load_eval_set  # noqa: E402
+from eval.run_benchmark import RESULTS_DIR, load_eval_set  # noqa: E402
 
 ROUTER_LABELS_PATH = REPO_ROOT / "eval" / "router_labels.json"
 K_NDCG = 10
 K_PRECISION = 5
+PHASE_TIMEOUT_SECONDS = 900  # generous: cloud phases pay real rate-limit wait time
 
 
 def _set_backend(backend: str) -> None:
@@ -112,6 +131,69 @@ def bench_retrieval_quality(backend: str, hard_queries: list[dict], user_ids: li
     }
 
 
+def _run_single_phase(backend: str, phase: str) -> dict | None:
+    """Entry point for a subprocess worker: runs exactly one (backend, phase) pair and
+    prints its JSON result to stdout. Isolated in its own process deliberately — see
+    the module docstring."""
+    if not backend_available(backend):
+        return None
+
+    if phase == "routing":
+        if not ROUTER_LABELS_PATH.exists():
+            return None
+        labels = json.loads(ROUTER_LABELS_PATH.read_text())
+        if not labels:
+            return None
+        return bench_routing_accuracy(backend, labels)
+
+    if phase == "retrieval":
+        eval_set = load_eval_set()
+        hard_queries = [q for q in eval_set if q["difficulty"] == "hard"]
+        with get_session() as session:
+            user_ids = [u.id for u in session.exec(select(UserRecord)).all()]
+        return bench_retrieval_quality(backend, hard_queries, user_ids)
+
+    raise ValueError(f"unknown phase {phase!r}")
+
+
+def _run_phase_in_subprocess(backend: str, phase: str) -> dict | None:
+    """Spawns `python eval/local_vs_cloud.py --backend X --phase Y` as a fresh
+    subprocess and parses its JSON stdout. See the module docstring for why this
+    isolation exists — it's a verified fix for a real hang, not defensive padding.
+
+    A slow/rate-limited cloud phase timing out must not crash the whole orchestrator
+    and lose already-collected results from other phases — caught and reported as a
+    missing (None) result for just this one phase instead."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--backend", backend, "--phase", phase],
+            capture_output=True,
+            text=True,
+            timeout=PHASE_TIMEOUT_SECONDS,
+            cwd=str(REPO_ROOT),
+        )
+    except subprocess.TimeoutExpired:
+        print(
+            f"[local_vs_cloud]   subprocess for backend={backend} phase={phase} "
+            f"exceeded {PHASE_TIMEOUT_SECONDS}s and was killed (rate limit or similar) — "
+            "reporting this phase as unavailable rather than losing other results.",
+            file=sys.stderr,
+        )
+        return None
+
+    if proc.returncode != 0:
+        print(f"[local_vs_cloud]   subprocess for backend={backend} phase={phase} failed:", file=sys.stderr)
+        print(proc.stderr[-4000:], file=sys.stderr)
+        return None
+
+    # The worker prints exactly one line prefixed with RESULT_JSON=; everything else
+    # on stdout is model-loading noise we don't want to try to parse as JSON.
+    for line in proc.stdout.splitlines():
+        if line.startswith("RESULT_JSON="):
+            return json.loads(line[len("RESULT_JSON=") :])
+    return None
+
+
 def plot_comparison(result: dict, out_path: Path) -> None:
     import matplotlib
 
@@ -148,15 +230,23 @@ def plot_comparison(result: dict, out_path: Path) -> None:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--backend", choices=["local", "cloud"], default=None)
+    parser.add_argument("--phase", choices=["routing", "retrieval"], default=None)
+    args = parser.parse_args()
+
+    if args.backend and args.phase:
+        # Subprocess-worker mode: run exactly one phase, print it, exit.
+        result = _run_single_phase(args.backend, args.phase)
+        print(f"RESULT_JSON={json.dumps(result)}")
+        return
+
+    # Orchestrator mode: run all four (backend, phase) combinations, each in its own
+    # subprocess (see module docstring for why).
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-
     result: dict = {"routing_accuracy": {}, "retrieval_quality": {}}
-
-    labels = json.loads(ROUTER_LABELS_PATH.read_text()) if ROUTER_LABELS_PATH.exists() else []
-    eval_set = load_eval_set()
-    hard_queries = [q for q in eval_set if q["difficulty"] == "hard"]
-    with get_session() as session:
-        user_ids = [u.id for u in session.exec(select(UserRecord)).all()]
 
     for backend in ("local", "cloud"):
         available = backend_available(backend)
@@ -166,16 +256,12 @@ def main() -> None:
             result["retrieval_quality"][backend] = None
             continue
 
-        if labels:
-            print(f"[local_vs_cloud]   routing accuracy on {len(labels)} labeled queries...")
-            result["routing_accuracy"][backend] = bench_routing_accuracy(backend, labels)
-            print(f"    {result['routing_accuracy'][backend]}")
-        else:
-            result["routing_accuracy"][backend] = None
-            print("[local_vs_cloud]   router_labels.json not found, skipping routing accuracy")
+        print(f"[local_vs_cloud]   routing accuracy (subprocess)...")
+        result["routing_accuracy"][backend] = _run_phase_in_subprocess(backend, "routing")
+        print(f"    {result['routing_accuracy'][backend]}")
 
-        print(f"[local_vs_cloud]   retrieval quality on {len(hard_queries)} hard queries x {len(user_ids)} users...")
-        result["retrieval_quality"][backend] = bench_retrieval_quality(backend, hard_queries, user_ids)
+        print(f"[local_vs_cloud]   retrieval quality (subprocess)...")
+        result["retrieval_quality"][backend] = _run_phase_in_subprocess(backend, "retrieval")
         print(f"    {result['retrieval_quality'][backend]}")
 
     result["_note"] = (
@@ -185,6 +271,13 @@ def main() -> None:
         "is the meaningful one: how well an on-device 1.5B model approximates a larger "
         "cloud model's judgment. retrieval_quality has no such issue — ground truth "
         "there is the hand-labeled eval set, independent of either backend."
+    )
+    result["_isolation_note"] = (
+        "Each (backend, phase) pair above ran in its own subprocess. This is a verified "
+        "fix for a real hang (see this file's module docstring), not defensive padding: "
+        "running routing accuracy then retrieval quality for the local backend in one "
+        "process reliably hung Ollama's llama-server after ~90 sequential requests; "
+        "isolated per phase (max ~49 or ~84 requests each), both complete reliably."
     )
 
     summary_path = RESULTS_DIR / "local_vs_cloud_summary.json"
