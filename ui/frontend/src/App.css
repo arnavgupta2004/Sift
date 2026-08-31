@@ -29,6 +29,16 @@
   font-size: 1rem;
 }
 
+.error-banner {
+  background: color-mix(in srgb, var(--danger) 12%, var(--panel-bg));
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
 .query-bar {
   display: flex;
   gap: 10px;

@@ -29,14 +29,17 @@ function App() {
 
   const [insights, setInsights] = useState<PersonalizationInsights | null>(null)
   const [insightsLoading, setInsightsLoading] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   const cancelRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    listUsers().then((u) => {
-      setUsers(u)
-      if (u.length > 0) setSelectedUserId(u[0].id)
-    })
+    listUsers()
+      .then((u) => {
+        setUsers(u)
+        if (u.length > 0) setSelectedUserId(u[0].id)
+      })
+      .catch(() => setApiError('Cannot reach the API. Is `uvicorn app.api:app` running on :8000?'))
   }, [])
 
   useEffect(() => {
@@ -44,6 +47,7 @@ function App() {
     setInsightsLoading(true)
     getPersonalization(selectedUserId)
       .then(setInsights)
+      .catch(() => setInsights(null))
       .finally(() => setInsightsLoading(false))
   }, [selectedUserId, results])
 
@@ -58,6 +62,7 @@ function App() {
     setFinalTrace(null)
     setIsStreaming(true)
     setLastQuery(query)
+    setApiError(null)
 
     cancelRef.current = streamQuery(
       query,
@@ -77,7 +82,10 @@ function App() {
           setIsStreaming(false)
         }
       },
-      () => setIsStreaming(false),
+      () => {
+        setIsStreaming(false)
+        setApiError('Query stream failed — check that the API is still running.')
+      },
     )
   }
 
@@ -87,6 +95,8 @@ function App() {
         <h1>Sift</h1>
         <p className="app-subtitle">Agentic file recommendation and retrieval — live routing, personalized, explained.</p>
       </header>
+
+      {apiError && <div className="error-banner">{apiError}</div>}
 
       <div className="query-bar panel">
         <select
