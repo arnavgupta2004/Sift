@@ -56,9 +56,7 @@ export function TracePanel({ tier, rationale, stagesByName, isStreaming, finalTr
           const state = !stage ? 'pending' : stage.skipped ? 'skipped' : 'done'
           return (
             <div key={name} className={`trace-stage trace-stage-${state}`}>
-              <span className="trace-stage-icon">
-                {state === 'done' ? '✅' : state === 'skipped' ? '⚪' : '⋯'}
-              </span>
+              <span className="trace-stage-icon" />
               <span className="trace-stage-name">{STAGE_LABELS[name] ?? name}</span>
               {state === 'done' && <span className="trace-stage-timing">{stage.duration_ms.toFixed(1)}ms</span>}
               {state === 'skipped' && stage.detail && (

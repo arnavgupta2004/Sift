@@ -36,7 +36,10 @@ export function IndexFolder({ onIndexed }: Props) {
   return (
     <div className="panel index-folder-panel">
       <button className="index-folder-toggle" onClick={() => setOpen((v) => !v)}>
-        <h3>📁 Index a real folder {open ? '▾' : '▸'}</h3>
+        <h3>
+          <span className={`index-folder-chevron${open ? ' open' : ''}`} />
+          Index a folder
+        </h3>
         <span className="index-folder-hint">
           {open ? '' : 'Point Sift at your Downloads, Documents, or any local directory'}
         </span>

@@ -59,9 +59,9 @@ export function BaselineChart() {
             <YAxis domain={[0, 1]} tick={{ fontSize: 11 }} />
             <Tooltip />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="Precision@5" fill="#4285f4" />
-            <Bar dataKey="NDCG@10" fill="#0f9d58" />
-            <Bar dataKey="MRR" fill="#db4437" />
+            <Bar dataKey="Precision@5" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="NDCG@10" fill="var(--success)" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="MRR" fill="var(--warning)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -73,7 +73,7 @@ export function BaselineChart() {
             <XAxis dataKey="system" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip />
-            <Bar dataKey="Latency (ms)" fill="#f4b400" />
+            <Bar dataKey="Latency (ms)" fill="var(--accent)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -30,10 +30,13 @@ export function ResultsList({ results, userId, query }: Props) {
               <span className="result-filetype">{r.file_type}</span>
               <span className="result-topic">{r.topic_cluster}</span>
             </div>
-            <p className="result-explanation">{r.explanation}</p>
             <div className="result-score-bar-track">
               <div className="result-score-bar-fill" style={{ width: `${Math.min(100, r.score * 100)}%` }} />
             </div>
+            <details className="result-why">
+              <summary>Why this ranked here</summary>
+              <p className="result-why-detail">{r.explanation}</p>
+            </details>
           </div>
           <div className="result-side">
             <span className="result-score-value">{r.score.toFixed(3)}</span>
@@ -41,16 +44,22 @@ export function ResultsList({ results, userId, query }: Props) {
               <button
                 className={feedbackGiven[r.file_id] === 'thumbs_up' ? 'feedback-btn active' : 'feedback-btn'}
                 onClick={() => handleFeedback(r.file_id, 'thumbs_up')}
-                aria-label="thumbs up"
+                aria-label="helpful"
+                title="Helpful"
               >
-                👍
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 9v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3Zm0 0 4.5-7a1.8 1.8 0 0 1 3.2 1.5L13.5 8H16a2 2 0 0 1 2 2.3l-1.1 6.5A2 2 0 0 1 14.9 18H9a2 2 0 0 1-2-2V9Z" />
+                </svg>
               </button>
               <button
                 className={feedbackGiven[r.file_id] === 'thumbs_down' ? 'feedback-btn active' : 'feedback-btn'}
                 onClick={() => handleFeedback(r.file_id, 'thumbs_down')}
-                aria-label="thumbs down"
+                aria-label="not helpful"
+                title="Not helpful"
               >
-                👎
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M13 11V2h3a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-3Zm0 0-4.5 7a1.8 1.8 0 0 1-3.2-1.5L6.5 12H4a2 2 0 0 1-2-2.3l1.1-6.5A2 2 0 0 1 5.1 2H11a2 2 0 0 1 2 2v7Z" />
+                </svg>
               </button>
             </div>
           </div>
