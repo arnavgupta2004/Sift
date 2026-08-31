@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate synthetic corpus
+        run: python data/generate_synthetic_data.py
+
+      - name: Build labeled eval set
+        run: python eval/build_eval_set.py
+
+      - name: Run tests
+        # No GEMINI_API_KEY secret is configured for this repo, so this exercises the
+        # rule-based fallback paths end to end — exactly what the system is designed
+        # to degrade to. See README for what changes with a key set.
+        run: pytest -q
+
+      - name: Run eval harness
+        run: |
+          python eval/run_benchmark.py
+          python eval/ablation_study.py
+          python eval/latency_comparison.py
+          python eval/baseline_comparison.py
+          python eval/personalization_lift.py
+
+      - name: Report eval drift vs. committed results
+        if: always()
+        run: |
+          echo "## Eval results: freshly generated vs. committed" >> "$GITHUB_STEP_SUMMARY"
+          if git diff --quiet -- eval/results/; then
+            echo "No drift — freshly generated eval/results/ match what's committed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Drift detected (expected without GEMINI_API_KEY, or after a real code change):" >> "$GITHUB_STEP_SUMMARY"
+            echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+            git diff --stat -- eval/results/ >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/results/
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build

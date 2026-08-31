@@ -1,0 +1,32 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    # Deliberately no volume mount for /app/data: it holds both the source generator
+    # scripts (copied in at build time) and the generated corpus/DB/index
+    # (docker-entrypoint.sh builds them on first boot of the container). A volume
+    # mounted over the whole directory would shadow the source scripts themselves,
+    # not just persist the generated data. Regenerating on every fresh container
+    # start (~1-2 min) is consistent with this project's reproducible-from-scratch
+    # philosophy everywhere else (see data/generate_synthetic_data.py).
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+    healthcheck:
+      # Generous start_period: first boot generates the synthetic corpus, downloads
+      # the sentence-transformer + cross-encoder models from Hugging Face, and builds
+      # the embedding index — a few minutes on a cold cache, seconds on a warm one.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/users')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+
+  frontend:
+    build: ./ui/frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy

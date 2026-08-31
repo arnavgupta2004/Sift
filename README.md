@@ -87,24 +87,30 @@ Sift/
 ├── data/
 │   ├── generate_synthetic_data.py  # single reproducible entry point (corpus + DB + access log)
 │   ├── synth/                      # topics, personas, content generation, access-log simulation
+│   ├── ingest_datasource.py        # real-data connector ingestion (Phase 12)
 │   └── files_corpus/, db.sqlite    # generated, gitignored — not checked in
 ├── app/
-│   ├── agent/       # graph.py (LangGraph), router.py, query_understanding.py, explain.py
+│   ├── agent/       # graph.py (LangGraph), router.py + learned_router.py, query_understanding.py, explain.py
 │   ├── retrieval/   # filename, metadata, keyword, semantic, hybrid_fusion (RRF from scratch), reranker
-│   ├── personalization/  # profile_builder, temporal_patterns, personalized_ranker
-│   ├── api.py       # FastAPI: /api/query, /api/query/stream (SSE), /api/users, /api/personalization
+│   ├── personalization/  # profile_builder, personalized_ranker, learned_ranker.py (LightGBM), retrain.py
+│   ├── datasources/  # DataSource interface + filesystem/synthetic implementations
+│   ├── api.py       # FastAPI: /api/query, /api/query/stream (SSE), /api/feedback, /api/personalization
 │   ├── llm_client.py  # single chokepoint for all LLM calls (Gemini-backed; see note below)
 │   ├── models.py    # shared SQLModel schema
 │   └── tracing.py   # RoutingTrace — the first-class per-stage timing object
 ├── ui/
-│   └── streamlit_app.py  # internal-iteration dev UI (throwaway — see build order)
+│   ├── streamlit_app.py  # internal-iteration dev UI (throwaway — see build order)
+│   └── frontend/          # production React + TypeScript UI (Vite) — the graded deliverable
 ├── eval/
 │   ├── build_eval_set.py, metrics.py, run_benchmark.py
 │   ├── ablation_study.py, latency_comparison.py, baseline_comparison.py, personalization_lift.py
-│   ├── eval_set.json     # 49 labeled queries, checked in
+│   ├── feedback_loop_demo.py, learned_ranker_comparison.py, build_router_labels.py, router_agreement.py
+│   ├── eval_set.json, router_labels.json   # labeled data, checked in
 │   ├── RESULTS.md        # full write-up, every number sourced from results/
 │   └── results/           # CSVs, JSON summaries, PNG charts — all regeneratable, checked in
-└── tests/            # 74 pytest cases across every component
+├── tests/            # pytest cases across every component
+├── Dockerfile, docker-compose.yml, docker-entrypoint.sh, ui/frontend/Dockerfile
+└── .github/workflows/ci.yml
 ```
 
 ## Running it
@@ -116,12 +122,33 @@ pip install -r requirements.txt
 python data/generate_synthetic_data.py   # builds the corpus + DB + access log from scratch
 python eval/build_eval_set.py            # builds the labeled eval set against that corpus
 
-pytest                                    # 74 tests
+pytest                                    # full test suite
 
 streamlit run ui/streamlit_app.py         # internal dev UI
 # or:
-uvicorn app.api:app --reload              # API only (POST /api/query, GET /api/query/stream)
+uvicorn app.api:app --reload              # API (POST /api/query, GET /api/query/stream)
+cd ui/frontend && npm install && npm run dev   # production React/TS UI (proxies to the API above)
 ```
+
+### Docker
+
+```bash
+docker-compose up
+```
+
+Brings up the API (`localhost:8000`) and the production UI (`localhost:5173`) together.
+First boot generates the synthetic corpus and builds the embedding index inside the `api`
+container (a few minutes on a cold Hugging Face model cache; the healthcheck's `start_period`
+accounts for this) — no manual setup. See `Dockerfile`, `docker-entrypoint.sh`,
+`ui/frontend/Dockerfile`, and `docker-compose.yml`.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every push/PR: regenerates the corpus, runs the full test
+suite, runs the entire eval harness, diffs the freshly generated `eval/results/` against what's
+committed (reported in the job summary), and separately type-checks + builds the React UI. No
+`GEMINI_API_KEY` secret is configured for CI, so it exercises the rule-based fallback paths —
+consistent with what the system is designed to degrade to.
 
 ### LLM backend
 
@@ -130,8 +157,11 @@ available). Every LLM call is isolated behind `app/llm_client.py`, which is inte
 provider-agnostic — swapping backends only touches that one file. Set `GEMINI_API_KEY` in a `.env` file
 (copy `.env.example`) to enable LLM-backed query enrichment, routing-classification fallback, and
 richer synthetic-content generation. **The system runs completely end-to-end without this set** —
-every LLM-gated step has a rule-based fallback, which is what all the eval numbers in this repo were
-run against (no API key was available in the build environment).
+every LLM-gated step has a rule-based fallback. Most of this repo's eval numbers were generated
+without a key (rule-based fallback paths); the router-agreement numbers
+(`eval/router_labels.json`, `eval/results/router_agreement_summary.json`) and the live-demo
+screenshots were generated with a real `GEMINI_API_KEY` once one became available — see
+`REPORT.md` for which is which.
 
 ## Reproducing every claim
 
