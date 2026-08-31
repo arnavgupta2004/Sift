@@ -9,15 +9,19 @@ Absolute timestamps are anchored to "now" at run time (not frozen to the seed) s
 personalization layer's recency/"it's Monday morning" features stay meaningful whenever
 this is demoed — see data/synth/access_log.py for that tradeoff.
 
-Content generation uses the Gemini API (app/llm_client.py) when GEMINI_API_KEY is set,
-for non-repetitive realistic prose; otherwise falls back to the seeded template
-generator in data/synth/content.py. Either way every file written is real: real .docx,
-real .xlsx, real .pptx, real .pdf, real .png, on disk under data/files_corpus/.
+Content generation uses whichever LLM backend is configured (app/llm_client.py —
+local Ollama by default, optional cloud Gemini) for non-repetitive realistic prose;
+otherwise falls back to the seeded template generator in data/synth/content.py.
+Either way every file written is real: real .docx, real .xlsx, real .pptx, real .pdf,
+real .png (with an actually-distinguishable drawn subject, not just a caption — see
+data/synth/corpus_writer.py — for CLIP image-content search to have something real to
+match against), on disk under data/files_corpus/.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 import sys
@@ -134,13 +138,16 @@ def write_to_disk(path: Path, file_type: str, title: str, gc: content.GeneratedC
         raise ValueError(f"unknown file_type {file_type}")
 
 
-def build_file_plan(num_files: int, seed: int, corpus_dir: Path, now: datetime, use_llm: bool) -> list[FileRecord]:
+def build_file_plan(
+    num_files: int, seed: int, corpus_dir: Path, now: datetime, use_llm: bool
+) -> tuple[list[FileRecord], dict[str, dict[str, str]]]:
     rng = Random(seed)
     per_topic = num_files // len(TOPICS)
     remainder = num_files - per_topic * len(TOPICS)
 
     records: list[FileRecord] = []
     used_filenames: set[str] = set()
+    image_subjects: dict[str, dict[str, str]] = {}
 
     for i, topic in enumerate(TOPICS):
         count = per_topic + (1 if i < remainder else 0)
@@ -154,6 +161,13 @@ def build_file_plan(num_files: int, seed: int, corpus_dir: Path, now: datetime, 
             rel_path = f"{topic.slug}/{filename}"
             abs_path = corpus_dir / rel_path
             write_to_disk(abs_path, file_type, title, gc, rows, slides, rng)
+
+            if file_type == "png":
+                # Same derivation write_to_disk's write_png call used internally
+                # (hash of the caption, not the shared rng — see corpus_writer.py) so
+                # this sidecar record matches the pixels actually on disk.
+                shape, color = corpus_writer.pick_subject(gc.display_text)
+                image_subjects[filename] = {"shape": shape, "color": color}
 
             created_at, modified_at = random_timestamps(rng, now)
             size_bytes = abs_path.stat().st_size
@@ -172,7 +186,7 @@ def build_file_plan(num_files: int, seed: int, corpus_dir: Path, now: datetime, 
             )
             used_filenames.add(filename)
 
-    return records
+    return records, image_subjects
 
 
 def main() -> None:
@@ -183,15 +197,27 @@ def main() -> None:
     parser.add_argument("--corpus-dir", type=Path, default=REPO_ROOT / "data" / "files_corpus")
     parser.add_argument("--db-path", type=Path, default=REPO_ROOT / "data" / "db.sqlite")
     parser.add_argument(
-        "--no-llm", action="store_true",
-        help="force the template content generator even if GEMINI_API_KEY is set",
+        "--use-llm-content", action="store_true",
+        help=(
+            "generate content via the configured LLM backend instead of the template "
+            "generator. Opt-in, not the default: bulk-generating ~150+ files' worth of "
+            "prose through a single local on-device model call-by-call is genuinely "
+            "slow (each call is real inference, not instant) — expect tens of minutes "
+            "for the full corpus, vs. seconds for the template generator. The template "
+            "generator is what every reproducibility claim in REPORT.md is based on; "
+            "this flag is for demonstrating richer content on a smaller --num-files run."
+        ),
     )
     args = parser.parse_args()
 
     from app.llm_client import get_client
 
-    use_llm = (not args.no_llm) and get_client().is_available
-    print(f"[generate_synthetic_data] content backend: {'Gemini' if use_llm else 'template (no API key)'}")
+    client = get_client()
+    use_llm = args.use_llm_content and client.is_available
+    if args.use_llm_content and not client.is_available:
+        print("[generate_synthetic_data] --use-llm-content passed but no LLM backend is available; using templates.")
+    backend_label = f"{client.backend} ({client.model})" if use_llm else "template (default, fast, reproducible)"
+    print(f"[generate_synthetic_data] content backend: {backend_label}")
 
     if args.corpus_dir.exists():
         shutil.rmtree(args.corpus_dir)
@@ -202,7 +228,10 @@ def main() -> None:
     now = datetime.now()
 
     print(f"[generate_synthetic_data] generating {args.num_files} files across {len(TOPICS)} topics (seed={args.seed})...")
-    file_records = build_file_plan(args.num_files, args.seed, args.corpus_dir, now, use_llm)
+    file_records, image_subjects = build_file_plan(args.num_files, args.seed, args.corpus_dir, now, use_llm)
+
+    image_subjects_path = REPO_ROOT / "data" / "image_subjects.json"
+    image_subjects_path.write_text(json.dumps(image_subjects, indent=2))
 
     engine = create_engine(f"sqlite:///{args.db_path}")
     SQLModel.metadata.create_all(engine)
@@ -246,6 +275,7 @@ def main() -> None:
         print(f"    {user.name} ({persona.key}): {n} events, recurring weekday->files: {recurring}")
     print(f"\n  corpus dir: {args.corpus_dir}")
     print(f"  db path:    {args.db_path}")
+    print(f"  image subjects: {len(image_subjects)} -> {image_subjects_path}")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,16 @@
-# Agentic File Recommendation and Retrieval System
+# Sift: Agentic File Recommendation and Retrieval System
 
 An agentic file-search system that understands a natural-language query, decides *which* retrieval
-strategies it actually needs (filename/fuzzy, metadata, keyword BM25, semantic embeddings, or a hybrid
-of these), personalizes results to the requesting user's behavioral history, and explains its own
-ranking decisions — instead of always running one fixed RAG pipeline.
+strategies it actually needs (filename/fuzzy, metadata, keyword BM25, semantic embeddings, CLIP image
+content, or a hybrid of these), personalizes results to the requesting user's behavioral history, and
+explains its own ranking decisions — instead of always running one fixed RAG pipeline. **Runs entirely
+on-device by default** (local Ollama LLM, local embedding/rerank/CLIP models, local vector store) —
+no API key required, nothing leaves the machine.
 
-> **Status: core system complete (build-order phases 1-9).** Extended scope (learned personalization
-> ranker, learned router, real-data connector, production React/TS UI, Docker + CI, full written report)
-> is tracked separately. Everything below is real, run, and verified — not aspirational.
+> **Status: complete**, core system (build-order phases 1-9) and extended scope (LightGBM personalization
+> + closed feedback loop, learned router, real filesystem connector as the UI's primary data path,
+> production React/TS UI, Docker + CI, full written report) — see `REPORT.md`. Everything below is real,
+> run, and verified — not aspirational.
 
 ## Headline numbers
 
@@ -24,12 +27,19 @@ commands in that file.
 - **Personalization's hand-tuned baseline shows a small negative lift** (−0.016 NDCG@10 against users'
   own access history) — reported honestly, not adjusted to look better, and used as the motivation for
   the learned (LightGBM) ranker in the extended-scope phase.
+- **Image content search actually works**: a CLIP-based retriever finds images by what's visually *in*
+  them — zero filename/keyword overlap with the query — at NDCG@10 0.83 in isolation. Found (and
+  partially fixed) a real bug doing this: the cross-encoder reranker was discarding CLIP's correct
+  matches because it only ever sees caption text, never pixels.
+- **Runs fully on-device by default** (Ollama, `qwen2.5:1.5b`, picked via a 3-model benchmark) — no API
+  key, nothing leaves the machine. The local model trails a cloud model on both routing accuracy and
+  retrieval-quality-relevant reasoning, reported honestly rather than hidden — see `REPORT.md` §5.6.
 
 ## Why this exists (the three objectives)
 
 | Objective | What it means | Where it lives |
 |---|---|---|
-| **1. Intelligent Discovery** | Understand intent, choose retrieval strategy/strategies, retrieve, rank, explain each result in natural language. | `app/agent/query_understanding.py`, `app/retrieval/` |
+| **1. Intelligent Discovery** | Understand intent, choose retrieval strategy/strategies (filename/metadata/keyword/semantic text/**image content via CLIP**), retrieve, rank, explain each result in natural language. | `app/agent/query_understanding.py`, `app/retrieval/` |
 | **2. Personalization** | Build a per-user behavioral profile (frequency, recency, topic affinity, temporal/session patterns) from an access log and use it to re-rank results. | `app/personalization/` |
 | **3. Agentic Routing** | Classify query complexity and route through the cheapest sufficient pipeline (fast / standard / deep), with measured latency savings vs. an always-full-pipeline baseline. | `app/agent/router.py`, `eval/latency_comparison.py` |
 
@@ -53,11 +63,13 @@ stream (`GET /api/query/stream`) and the dev UI's trace panel render in real tim
         +-------------------+-------------------+
         |                   |                   |
      FAST                STANDARD              DEEP
-  filename +         metadata + keyword    metadata + keyword
-  metadata only        + semantic           + semantic
+  filename +       metadata + keyword    metadata + keyword
+  metadata only    + semantic + image    + semantic + image
   (RRF fusion)        (RRF fusion)          (RRF fusion)
         |                   |                   |
-        |                   |            Cross-encoder rerank
+        |                   |         Cross-encoder rerank (text
+        |                   |        candidates only — image-CLIP
+        |                   |         matches keep their score)
         |                   |                   |
         +-------------------+-------------------+
                             |
@@ -150,24 +162,38 @@ committed (reported in the job summary), and separately type-checks + builds the
 `GEMINI_API_KEY` secret is configured for CI, so it exercises the rule-based fallback paths —
 consistent with what the system is designed to degrade to.
 
-### LLM backend
+### LLM backend — runs fully on-device by default
 
-This project was specced against the Claude API but built against **Gemini** (the credential actually
-available). Every LLM call is isolated behind `app/llm_client.py`, which is intentionally
-provider-agnostic — swapping backends only touches that one file. Set `GEMINI_API_KEY` in a `.env` file
-(copy `.env.example`) to enable LLM-backed query enrichment, routing-classification fallback, and
-richer synthetic-content generation. **The system runs completely end-to-end without this set** —
-every LLM-gated step has a rule-based fallback. Most of this repo's eval numbers were generated
-without a key (rule-based fallback paths); the retrieval-quality and router-agreement numbers
-(`eval/router_labels.json`, `eval/results/router_agreement_summary.json`) were generated with a
-real `GEMINI_API_KEY` once one became available — see `REPORT.md` §8.1 for exactly which numbers
-are which.
+**Sift runs entirely offline by default.** Every LLM call — query enrichment, routing-classification
+fallback, explanation generation, synthetic-content generation — goes through `app/llm_client.py`,
+which defaults to **Ollama running locally** (`LLM_BACKEND=local`, model `qwen2.5:1.5b`). No API key,
+no network call ever leaves the machine, no per-request cost. Install and pull the model once:
 
-**Free-tier rate limits**: on `gemini-3.5-flash-lite`'s free tier (15 requests/minute), running
-`pytest` or the eval scripts with a key set can be noticeably slower — deep-route and borderline
-queries make real API calls, and the retry/backoff in `app/llm_client.py` can compound with the
-Gemini SDK's own internal retries under sustained load. For a fast local test run, unset the key
-for that one invocation: `GEMINI_API_KEY= pytest`.
+```bash
+brew install ollama          # or your platform's equivalent
+brew services start ollama   # or: ollama serve
+ollama pull qwen2.5:1.5b
+```
+
+`qwen2.5:1.5b` was picked empirically, not by default assumption — it benchmarked best of 3 candidates
+(qwen2.5:1.5b, llama3.2:1b, phi3:mini) on this project's actual routing/explanation tasks. See
+`REPORT.md` §5.6 and `eval/local_vs_cloud.py` for the full 3-model comparison and the on-device-vs-cloud
+tradeoff table.
+
+**The system runs completely end-to-end without Ollama running at all**, too — every LLM-gated step
+has a rule-based fallback, same as before.
+
+An optional cloud comparison arm (Gemini) is still available — set `LLM_BACKEND=cloud` and
+`GEMINI_API_KEY` in `.env` — but it is never the default and the system never silently falls back to
+it. Most of this repo's eval numbers were generated with the local backend (the required default for
+grading); the retrieval-quality and router-agreement numbers were generated with the cloud backend
+specifically to establish real-LLM ground truth to compare the local model against — see `REPORT.md`
+§8.1 and §5.6 for exactly which numbers are which and why.
+
+**Free-tier cloud rate limits** (only relevant if you explicitly opt into `LLM_BACKEND=cloud`): on
+`gemini-3.5-flash-lite`'s free tier (15 requests/minute), running `pytest` or the eval scripts against
+the cloud backend can be noticeably slower — the retry/backoff in `app/llm_client.py` can compound with
+the Gemini SDK's own internal retries under sustained load. The local backend has no such limit.
 
 ## Reproducing every claim
 

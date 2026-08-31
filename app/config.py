@@ -57,3 +57,8 @@ FEEDBACK_ROW_WEIGHT = 3.0
 # Per-file text extraction cap, so one huge PDF/spreadsheet doesn't blow up the
 # embedding/keyword index with an outlier-sized document.
 MAX_EXTRACTED_CONTENT_CHARS = 20_000
+
+# --- Image content search (app/retrieval/image_search.py) ------------------------
+# Local, on-device CLIP variant via sentence-transformers — embeds actual pixels, not
+# filename/caption text, into a shared text-image space for content-based matching.
+IMAGE_CLIP_MODEL_NAME = "clip-ViT-B-32"

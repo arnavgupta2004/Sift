@@ -70,6 +70,14 @@ export interface BaselineStats {
 
 export type BaselineComparison = Record<string, BaselineStats>
 
+export interface IngestResult {
+  root: string
+  n_files_crawled: number
+  by_type: Record<string, number>
+  n_indexed_total: number
+  cleared_existing: boolean
+}
+
 export type SSEEvent =
   | { type: 'route'; tier: string; rationale: string }
   | { type: 'stage'; name: string; duration_ms: number; skipped: boolean; detail: string }

@@ -14,4 +14,7 @@ fi
 echo "[docker-entrypoint] warming the semantic search index..."
 python -m app.retrieval.semantic_search --build
 
+echo "[docker-entrypoint] warming the image content (CLIP) index..."
+python -m app.retrieval.image_search --build
+
 exec "$@"

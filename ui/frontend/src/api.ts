@@ -1,5 +1,6 @@
 import type {
   BaselineComparison,
+  IngestResult,
   PersonalizationInsights,
   SSEEvent,
   UserSummary,
@@ -7,6 +8,23 @@ import type {
 
 export async function listUsers(): Promise<UserSummary[]> {
   const res = await fetch('/api/users')
+  return res.json()
+}
+
+export async function ingestFolder(
+  root: string,
+  maxFiles: number,
+  clearExisting: boolean,
+): Promise<IngestResult> {
+  const res = await fetch('/api/ingest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ root, max_files: maxFiles, clear_existing: clearExisting }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(body.detail ?? 'Failed to index folder')
+  }
   return res.json()
 }
 

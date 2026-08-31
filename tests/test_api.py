@@ -54,6 +54,67 @@ class TestBaselineComparisonEndpoint:
         assert "naive_keyword" in body
 
 
+class TestIngestEndpoint:
+    """Contract tests only (request validation, error mapping, response shape) via
+    monkeypatched internals — no real DB/filesystem mutation. The deeper crawl+insert
+    logic is already covered in isolation by tests/test_datasources.py and
+    tests/test_ingest_datasource.py; a real end-to-end run of this endpoint was also
+    manually verified against a real ~300-file Downloads folder during development
+    (see REPORT.md)."""
+
+    def test_missing_root_returns_400(self, monkeypatch):
+        def fake_init(self, root, max_files=None, exclude_dirs=None):
+            raise FileNotFoundError(f"root does not exist: {root}")
+
+        monkeypatch.setattr(
+            "app.datasources.filesystem_source.FilesystemDataSource.__init__", fake_init
+        )
+        resp = client.post("/api/ingest", json={"root": "/definitely/not/a/real/path"})
+        assert resp.status_code == 400
+
+    def test_empty_directory_returns_400(self, monkeypatch):
+        class EmptySource:
+            def __init__(self, root, max_files=None, exclude_dirs=None):
+                self.root = root
+
+            def list_files(self):
+                return []
+
+        monkeypatch.setattr("app.datasources.filesystem_source.FilesystemDataSource", EmptySource)
+        resp = client.post("/api/ingest", json={"root": "/tmp"})
+        assert resp.status_code == 400
+
+    def test_happy_path_returns_summary_shape(self, monkeypatch):
+        from datetime import datetime
+
+        from app.datasources.base import RawFile
+
+        class FakeSource:
+            def __init__(self, root, max_files=None, exclude_dirs=None):
+                self.root = root
+
+            def list_files(self):
+                return [
+                    RawFile(
+                        filename="a.md", path="a.md", file_type="md", size_bytes=10,
+                        created_at=datetime.now(), modified_at=datetime.now(),
+                        extracted_text="hello",
+                    )
+                ]
+
+        monkeypatch.setattr("app.datasources.filesystem_source.FilesystemDataSource", FakeSource)
+        monkeypatch.setattr("data.ingest_datasource.ingest_files", lambda *a, **k: {"md": 1})
+        monkeypatch.setattr("app.retrieval.semantic_search.build_index", lambda force=False: 351)
+
+        resp = client.post("/api/ingest", json={"root": "/tmp", "max_files": 10})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["n_files_crawled"] == 1
+        assert body["by_type"] == {"md": 1}
+        assert body["n_indexed_total"] == 351
+        assert body["cleared_existing"] is False
+
+
 class TestFeedbackEndpoint:
     def test_records_valid_feedback(self):
         resp = client.post(

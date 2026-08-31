@@ -3,6 +3,7 @@ import './App.css'
 import { getPersonalization, listUsers } from './api'
 import { streamQuery } from './api'
 import { BaselineChart } from './components/BaselineChart'
+import { IndexFolder } from './components/IndexFolder'
 import { PersonalizationPanel } from './components/PersonalizationPanel'
 import { ResultsList } from './components/ResultsList'
 import { TracePanel } from './components/TracePanel'
@@ -97,6 +98,8 @@ function App() {
       </header>
 
       {apiError && <div className="error-banner">{apiError}</div>}
+
+      <IndexFolder />
 
       <div className="query-bar panel">
         <select

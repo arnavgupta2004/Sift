@@ -27,9 +27,10 @@ jobs:
         run: python eval/build_eval_set.py
 
       - name: Run tests
-        # No GEMINI_API_KEY secret is configured for this repo, so this exercises the
-        # rule-based fallback paths end to end — exactly what the system is designed
-        # to degrade to. See README for what changes with a key set.
+        # No Ollama and no GEMINI_API_KEY are available in this runner, so this
+        # exercises the rule-based fallback paths end to end for every LLM-gated code
+        # path — exactly what the system is designed to degrade to. See README for
+        # what changes with a local model or cloud key available.
         run: pytest -q
 
       - name: Run eval harness
@@ -39,6 +40,7 @@ jobs:
           python eval/latency_comparison.py
           python eval/baseline_comparison.py
           python eval/personalization_lift.py
+          python eval/image_content_search.py
 
       - name: Report eval drift vs. committed results
         if: always()

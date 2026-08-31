@@ -22,7 +22,7 @@ from app.config import CANDIDATE_POOL_SIZE, FINAL_RESULT_COUNT
 from app.db import get_session
 from app.models import FileRecord
 from app.personalization.personalized_ranker import WeightedSumPersonalizer
-from app.retrieval import filename_search, keyword_search, metadata_search, semantic_search
+from app.retrieval import filename_search, image_search, keyword_search, metadata_search, semantic_search
 from app.retrieval.base import ScoredFile
 from app.retrieval.hybrid_fusion import reciprocal_rank_fusion
 from app.retrieval.metadata_search import MetadataFilters
@@ -110,6 +110,7 @@ def node_fast_retrieve(state: GraphState) -> dict:
 
     trace.skip("keyword_search", "fast route: filename+metadata only")
     trace.skip("semantic_search", "fast route: filename+metadata only")
+    trace.skip("image_search", "fast route: filename+metadata only")
     trace.skip("reranker", "fast route: skips the cross-encoder entirely")
 
     with trace.stage("hybrid_fusion", detail="filename+metadata"):
@@ -126,7 +127,7 @@ def node_standard_retrieve(state: GraphState) -> dict:
     trace = state["trace"]
     intent = state["intent"]
 
-    trace.skip("filename_search", "standard route: metadata+keyword+semantic only")
+    trace.skip("filename_search", "standard route: metadata+keyword+semantic+image only")
 
     if _has_filters(intent.filters):
         with trace.stage("metadata_search"):
@@ -141,11 +142,15 @@ def node_standard_retrieve(state: GraphState) -> dict:
     with trace.stage("semantic_search"):
         sem_results = semantic_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
 
+    with trace.stage("image_search", detail="CLIP content match over indexed images"):
+        img_results = image_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
+
     trace.skip("reranker", "standard route: no cross-encoder pass")
 
-    with trace.stage("hybrid_fusion", detail="metadata+keyword+semantic"):
+    with trace.stage("hybrid_fusion", detail="metadata+keyword+semantic+image"):
         candidates = reciprocal_rank_fusion(
-            [lst for lst in (meta_results, kw_results, sem_results) if lst], limit=CANDIDATE_POOL_SIZE
+            [lst for lst in (meta_results, kw_results, sem_results, img_results) if lst],
+            limit=CANDIDATE_POOL_SIZE,
         )
 
     return {"candidates": candidates}
@@ -170,9 +175,13 @@ def node_deep_retrieve(state: GraphState) -> dict:
     with trace.stage("semantic_search"):
         sem_results = semantic_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
 
-    with trace.stage("hybrid_fusion", detail="metadata+keyword+semantic"):
+    with trace.stage("image_search", detail="CLIP content match over indexed images"):
+        img_results = image_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
+
+    with trace.stage("hybrid_fusion", detail="metadata+keyword+semantic+image"):
         fused = reciprocal_rank_fusion(
-            [lst for lst in (meta_results, kw_results, sem_results) if lst], limit=CANDIDATE_POOL_SIZE
+            [lst for lst in (meta_results, kw_results, sem_results, img_results) if lst],
+            limit=CANDIDATE_POOL_SIZE,
         )
 
     with trace.stage("reranker"):

@@ -48,6 +48,45 @@ def list_users():
     return [{"id": u.id, "name": u.name, "persona_key": u.persona_key} for u in users]
 
 
+class IngestRequest(BaseModel):
+    root: str
+    max_files: int = 300
+    clear_existing: bool = False
+
+
+@app.post("/api/ingest")
+def ingest(req: IngestRequest):
+    """Crawls a real local directory (the backend process's own filesystem — this is a
+    local-first app, not a browser upload) and ingests it into the same FileRecord
+    table + semantic index every other endpoint reads. This is what the UI's "index a
+    real folder" flow calls; see app/datasources/filesystem_source.py."""
+    from app.datasources.filesystem_source import FilesystemDataSource
+    from app.retrieval.semantic_search import build_index
+    from data.ingest_datasource import ingest_files
+
+    try:
+        source = FilesystemDataSource(root=req.root, max_files=req.max_files)
+        raw_files = source.list_files()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not raw_files:
+        raise HTTPException(status_code=400, detail=f"no readable files found under {source.root}")
+
+    with get_session() as session:
+        by_type = ingest_files(raw_files, session, clear_existing=req.clear_existing)
+
+    n_indexed = build_index(force=True)
+
+    return {
+        "root": str(source.root),
+        "n_files_crawled": len(raw_files),
+        "by_type": by_type,
+        "n_indexed_total": n_indexed,
+        "cleared_existing": req.clear_existing,
+    }
+
+
 @app.post("/api/query")
 def query(req: QueryRequest):
     return run_query(req.query, req.user_id)

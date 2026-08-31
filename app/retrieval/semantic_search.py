@@ -40,7 +40,12 @@ def _get_embedder():
 def _get_collection():
     import chromadb
 
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
+    # anonymized_telemetry=False: chromadb otherwise phones home to PostHog on every
+    # client init — see app/retrieval/image_search.py's _get_collection for why this
+    # matters beyond just privacy (it caused an 11+ minute hang during development).
+    client = chromadb.PersistentClient(
+        path=str(CHROMA_DIR), settings=chromadb.Settings(anonymized_telemetry=False)
+    )
     return client.get_or_create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
 
 

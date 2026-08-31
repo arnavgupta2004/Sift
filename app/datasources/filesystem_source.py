@@ -51,13 +51,18 @@ class FilesystemDataSource(DataSource):
                     continue
 
                 ext = full_path.suffix.lstrip(".").lower() or "unknown"
-                rel_path = str(full_path.relative_to(self.root))
+                # Absolute path, not root-relative: real files are scattered anywhere
+                # on disk (unlike the synthetic corpus, which always lives under a
+                # known data/files_corpus/ root), so this is what lets
+                # app/retrieval/image_search.py find an ingested image's actual bytes
+                # again later to embed it — a root-relative path alone isn't
+                # self-locating once it's just a row in the DB.
                 text = _extract_text(full_path, ext)
 
                 results.append(
                     RawFile(
                         filename=name,
-                        path=rel_path,
+                        path=str(full_path),
                         file_type=ext,
                         size_bytes=stat.st_size,
                         created_at=datetime.fromtimestamp(stat.st_ctime),

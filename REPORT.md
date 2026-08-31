@@ -16,12 +16,17 @@ an explicit LangGraph agent that routes each query through the cheapest retrieva
 pipeline sufficient for it (Objective 3), a personalization layer that learns from
 behavioral signals and improves through use (Objective 2), and a hybrid retrieval
 stack whose components are individually justified by ablation, not assumed
-(Objective 1). Every claim below is backed by a reproducible benchmark, including the
+(Objective 1) — extended to actually search image *content*, not just filenames, via a
+local CLIP model. It also runs **entirely on-device by default**: a small
+(1.5B-parameter) local LLM via Ollama handles routing, query enrichment, and
+explanation, with cloud LLM kept only as an optional comparison arm, never the
+required path. Every claim below is backed by a reproducible benchmark, including the
 ones that didn't come out flattering — a hand-tuned personalization baseline that
 underperforms doing nothing, a zero-shot learned ranker that underperforms the
-hand-tuned baseline, and a routing tradeoff with a real, stated quality cost. Reporting
-those honestly, and then explaining and in some cases fixing them, is the actual
-content of this report.
+hand-tuned baseline, a routing tradeoff with a real, stated quality cost, and an
+on-device model that measurably trails its cloud counterpart. Reporting those
+honestly, and then explaining and in some cases fixing them, is the actual content of
+this report.
 
 ## 1. Introduction
 
@@ -92,12 +97,12 @@ read from.
 |---|---|---|
 | Backend | FastAPI | as specced |
 | Agent orchestration | LangGraph | explicit nodes/edges, not a hidden loop |
-| LLM | **Gemini** (`gemini-3.5-flash-lite`), via `app/llm_client.py` | specced against Claude; built against Gemini because that was the available credential. Provider-agnostic call surface (`complete`, `is_available`) — swapping backends again only touches this one file. |
+| LLM | **Ollama, `qwen2.5:1.5b`, local/on-device (default)**; Gemini kept as an opt-in cloud comparison arm | specced against Claude, then built against Gemini, then required to move fully on-device by the actual course brief ("you have to use the LLM on the device... 1 billion model or even lesser"). `LLM_BACKEND` env var switches between `local` (default) and `cloud`; the provider-agnostic call surface (`complete`, `is_available`) in `app/llm_client.py` made this a contained change — see §5.6 for the 3-model on-device benchmark this default is based on. |
 | Filename search | rapidfuzz | as specced |
 | Metadata + access log | SQLite via SQLModel | as specced |
 | Keyword search | rank_bm25 | as specced |
-| Embeddings | sentence-transformers, `all-MiniLM-L6-v2` | as specced (alternate model option) |
-| Vector store | ChromaDB, local persistent | as specced |
+| Embeddings | sentence-transformers, `all-MiniLM-L6-v2` (text) + `clip-ViT-B-32` (image content, added) | text embedder as specced; CLIP added to close a real gap — images were previously only findable by filename/metadata, never by what's actually in them (see §3.4) |
+| Vector store | ChromaDB, local persistent, two collections (text + image) | as specced, plus `anonymized_telemetry=False` — chromadb otherwise phones home by default, which both contradicts "runs entirely on-device" and, once, caused an 11-minute hang mid-eval-run waiting on that call (see §8.1) |
 | Hybrid fusion | Reciprocal Rank Fusion, hand-implemented | as specced — not imported, ~15 lines |
 | Reranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` | as specced |
 | Personalization | weighted-sum baseline + LightGBM LTR | both implemented, A/B'd against each other |
@@ -149,6 +154,61 @@ is query relevance with no notion of who's asking, and personalization explicitl
 trades some of that off; §4.3 measures the thing personalization is actually for.
 
 ![Ablation study](eval/results/ablation_study.png)
+
+(§3.3's ablation predates image search below and isn't rerun with it added, so as not
+to silently change an already-reported, reproducible number — §3.4 reports image
+search on its own terms instead.)
+
+### 3.4 Image content search: closing a real gap
+
+Before this: `.png`/`.jpg` files were indexed by filename and metadata only.
+`app.retrieval.semantic_search` (the text embedder) never looked at pixels — an image
+was findable by what it was *called*, never by what was actually *in* it. This is the
+motivating example the on-device requirement was framed around: "searching an image is
+very difficult... convert this image into some embedding and the query... will get
+matched." `app/retrieval/image_search.py` does exactly that, locally, via CLIP
+(`clip-ViT-B-32`, sentence-transformers) — the same text-image shared embedding space
+CLIP was built for, in its own Chroma collection (512-dim, incompatible with the
+384-dim text embedder, so it can't share the existing one).
+
+**Making the eval honest, not just present.** The synthetic corpus's generated images
+originally had near-identical content (a background color + a caption banner) —
+nothing for CLIP to actually discriminate on. `data/synth/corpus_writer.py` now draws
+one large, distinct, saturated shape (circle/square/triangle/star, one of six
+saturated colors) per image, deterministically from a hash of the image's caption —
+**not** from the shared per-file RNG stream, since consuming extra draws there would
+have shifted every subsequently-generated file for the same `--seed`, silently
+invalidating every other already-committed reproducibility claim in this report (a
+real risk that was caught before it happened, not after — see the regression test in
+`tests/test_corpus_writer.py`).
+
+`eval/image_content_search.py` builds queries like *"there's a photo somewhere with a
+large blue triangle in it, not sure what it's called"* — deliberately avoiding the
+word "image" itself, which collides with real corpus filenames (`hero_image_*.png`)
+and was initially producing keyword-luck matches, not content matches (caught and
+fixed the same way — see below). No filename or caption text overlaps with these
+queries at all.
+
+| | Precision@5 | Recall@5 | NDCG@10 | MRR |
+|---|---|---|---|---|
+| **CLIP retriever alone** | 0.433 | 0.875 | **0.831** | 0.806 |
+| Full pipeline (before reranker fix) | 0.122 | — | 0.299 | 0.270 |
+| **Full pipeline (after reranker fix)** | 0.156 | — | **0.353** | 0.327 |
+
+**A second real bug, found and partially fixed by this eval, not glossed over.** The
+isolated CLIP retriever works well (NDCG@10 0.83) — but the full pipeline's deep-route
+cross-encoder reranker only ever sees `filename + extracted_text`, which for an image
+is just its caption, never the pixels. It was re-scoring CLIP's correct visual matches
+against irrelevant caption text and actively discarding the real signal. Fixed in
+`app/retrieval/reranker.py`: candidates sourced from `image_search` now bypass the
+cross-encoder entirely and keep their fused CLIP-based score. This closed part of the
+gap (NDCG@10 0.299 → 0.353) but not all of it — RRF fusion still blends in the
+metadata/keyword/text-semantic retrievers' rankings, which have no real signal for a
+pure-content query and inject noise the reranker fix can't address on its own. Reported
+honestly as a remaining limitation (§8), not chased further into a synthetic-eval-
+specific tweak: the isolated-retriever number is the one that actually demonstrates the
+capability works; the full-pipeline number honestly shows where cross-modal fusion
+still has room to improve.
 
 ## 4. Objective 2: Personalization
 
@@ -358,9 +418,76 @@ top of. A hypothetical "lazy RAG wrapper" (naive semantic-only) isn't just
 architecturally simpler than this system; it's measurably worse on every quality
 metric.
 
+### 5.6 On-device LLM: the local-vs-cloud tradeoff
+
+The course brief requires this to run fully on-device — no LLM API calls, a model
+"1 billion [parameters] or even lesser." `app/llm_client.py` was restructured around
+an `LLM_BACKEND` switch (`local` default, `cloud` optional) rather than bolted on:
+every call site (router, query enrichment, explanation) already went through one
+function, so this was a contained change, not a rewrite.
+
+**Model selection (3-way benchmark, not a default assumption).** Three small
+instruction-tuned models were pulled via Ollama and benchmarked on this project's
+actual routing-classification task (6 representative queries spanning fast/standard/
+deep, using the exact system prompt `app/agent/router.py` sends):
+
+| Model | Accuracy | Mean latency (warm) |
+|---|---|---|
+| **qwen2.5:1.5b** | **4/6** | **89 ms** |
+| llama3.2:1b | 2/6 | 82 ms |
+| phi3:mini | 3/6 | 178 ms |
+
+qwen2.5:1.5b won on both axes — best accuracy (and the only one that got every
+deep-tier query right, the most consequential misclassification to avoid) and fastest
+— and was also markedly cleaner output (llama3.2:1b occasionally wrapped its answer in
+markdown bold, `**standard**`, which needed defensive parsing). It's the default.
+
+**Local vs. cloud, head to head** (`eval/local_vs_cloud.py`; see that script's
+`_methodology_note` in `eval/results/local_vs_cloud_summary.json` for the full
+scope caveats — a rate-limit issue on the cloud side and a resource-accumulation hang
+on repeated local calls both forced smaller/reused samples than originally planned,
+documented rather than hidden):
+
+| | Routing agreement with LLM-judged ground truth | Retrieval quality, hard tier (NDCG@10) |
+|---|---|---|
+| **Local (qwen2.5:1.5b)** | 51.0% (n=49) | 0.350 (n=5) |
+| **Cloud (Gemini)** | ~100% by construction* | 0.451 (n=42, reused from §3.3's run) |
+
+\* the ground-truth labels were themselves generated by calling the cloud backend, so
+cloud-vs-those-labels isn't an independent measurement — see the note in the results
+file. The local number is the one that actually says something: a 1.5B on-device
+model agrees with a much larger cloud model's routing judgment about half the time.
+
+![Local vs cloud](eval/results/local_vs_cloud.png)
+
+**Read honestly**: the cloud model is meaningfully better at both routing
+classification and retrieval-quality-relevant reasoning (query enrichment,
+explanation) — expected, given the parameter-count gap. The local model is not a
+drop-in equivalent; it's what "1B-or-smaller, fully offline" actually costs in quality.
+What it buys back: zero API cost, zero network dependency, zero rate limit (the entire
+reason the cloud-side numbers above are smaller-sample than the local ones — the local
+backend never once needed a workaround for this), and full test-suite runs in ~100s
+flat with no external dependency at all (§8.1's README note on this).
+
+**Two real bugs found building this, not glossed over:**
+1. ChromaDB's Python client phones home to PostHog telemetry on every client
+   initialization by default — directly contradicting "runs entirely on-device,
+   nothing leaves the machine," and, once, causing an 11-minute hang mid-eval-run
+   waiting on that exact call (confirmed via `lsof`: the stuck process had open
+   connections to Cloudfront/Google IPs, not to Ollama). Fixed with
+   `chromadb.Settings(anonymized_telemetry=False)` in both `semantic_search.py` and
+   `image_search.py`.
+2. `data/generate_synthetic_data.py`'s LLM-content-generation path, once a local
+   backend was unconditionally "available," silently started making ~150+ real
+   sequential inference calls on every corpus regeneration — each individually fast,
+   cumulatively tens of minutes. Fixed by making LLM-based content generation an
+   explicit opt-in flag (`--use-llm-content`) rather than "on whenever a backend is
+   reachable"; the template generator is the fast, reproducible default the rest of
+   this report's numbers are based on either way.
+
 ## 6. Extended-scope components
 
-### 6.1 Real-data connector
+### 6.1 Real-data connector — promoted to the application's primary data source
 
 `app/datasources/` defines a `DataSource` interface (`list_files() -> RawFile`);
 `FilesystemDataSource` crawls a real local directory with real text extraction
@@ -370,16 +497,51 @@ adapts the existing corpus to the same interface, so the two are provably
 interchangeable rather than just described as such
 (`tests/test_datasources.py` runs `SyntheticDataSource` against the real generated
 corpus). `data/ingest_datasource.py` populates the same `files` table the synthetic
-generator does and rebuilds the semantic index. Verified against the real production
-DB: crawled 20 real files from this repo, confirmed `open retrain.py` correctly
-fast-routes and ranks the real file first, and a standard-route semantic query for
-*"python file about learning to rank personalization"* correctly surfaced
-`training_data.py`, `retrain.py`, `features.py`, `profile_builder.py` from the mixed
-370-file real+synthetic corpus. Google Drive was the other option in the original
-brief; filesystem crawling was chosen instead after flagging that indexing real Drive
-content into local storage for a live demo is a meaningfully different privacy
-decision than everything else in this project, and letting the person whose Drive it
-is make that call explicitly.
+generator does and rebuilds the semantic index — one metadata DB, one vector store,
+regardless of where the rows came from.
+
+This started as a secondary/test-only capability; the actual course brief's mental
+model is a real desktop app pointed at a real folder ("this application should work on
+Windows also, Mac also, Linux also... rather than searching with the keyword... we
+will now interact with the natural language"), not a web app querying a synthetic
+database. It's now wired into the production UI directly: a **📁 Index a real folder**
+panel (`ui/frontend/src/components/IndexFolder.tsx`) at the top of the page, backed by
+`POST /api/ingest`, lets anyone point Sift at a real local directory — no CLI needed —
+and it works identically on Windows/macOS/Linux since it's a plain filesystem walk
+against wherever the backend process runs, not a browser upload. Ingested files
+default to *adding to* the synthetic corpus rather than replacing it (a `clear
+existing corpus` checkbox opts into replacement), so the demoable app can show real
+and synthetic files side by side.
+
+**A real gap fixed to make this actually work**: real files' paths need to be
+self-locating on disk later (for §3.4's image indexing to find the actual pixels), but
+they're scattered anywhere on the filesystem — unlike the synthetic corpus, which
+always lives under one known root. `FilesystemDataSource` now stores the absolute
+resolved path for real files (was root-relative, which loses the root once it's just a
+row in a database) while synthetic files keep their existing corpus-relative
+convention.
+
+**Verified live against a real, messy, ~300-file Downloads folder** (not a curated
+demo directory): the folder-index flow correctly crawled and indexed real PDFs,
+images, videos, code, spreadsheets, and archives (`.pdf`, `.docx`, `.pptx`, `.xlsx`,
+`.png`, `.jpg`, `.mp4`, `.ipynb`, `.zip`, and more, recursing through subdirectories),
+extending the corpus from 350 to 650 files. A subsequent `show me my pptx files` query
+correctly surfaced real `.pptx` files from that folder (tagged `topic_cluster:
+uncategorized`, honestly, alongside synthetic files) in the results — proving real and
+synthetic data coexist and rank together, not just that ingestion runs without
+crashing. (Earlier iteration caught a real methodology risk here too: running this UI
+test concurrently with an eval script against the same live DB/vector-index corrupted
+that script's in-flight results, since both share one on-disk Chroma store — the eval
+was re-run cleanly afterward, and this is now a documented constraint on how eval
+scripts and live UI testing should be sequenced, not run in parallel.)
+
+Google Drive was the other option in the original brief; filesystem crawling was
+chosen instead after flagging that indexing real Drive content into local storage for
+a live demo is a meaningfully different privacy decision than everything else in this
+project, and letting the person whose Drive it is make that call explicitly. The
+synthetic corpus and full eval harness remain the evidence base for every quantitative
+claim elsewhere in this report — this section is about what the demoed *application*
+points at by default, not a replacement for reproducible evaluation infrastructure.
 
 ### 6.2 Production UI
 
@@ -396,12 +558,18 @@ deep query took ~21s (model loading) and the identical warm-cache query took ~2.
 
 ### 6.3 Docker and CI
 
-`docker-compose up` brings up the API and the React UI together; the API container
-generates the synthetic corpus and builds the embedding index on first boot if absent.
-A GitHub Actions workflow (`.github/workflows/ci.yml`) regenerates the corpus, runs
-the full test suite, runs the entire eval harness, reports drift between freshly
-generated `eval/results/` and what's committed (via `git diff`, in the job summary),
-and separately type-checks and builds the React UI, on every push.
+`docker-compose up` brings up an `ollama` service, a one-shot `ollama-pull` init
+container that pulls `qwen2.5:1.5b` once Ollama is accepting connections (`api`
+waits on this completing, not just on Ollama being healthy, so the first real query
+never races a still-downloading model), the API, and the React UI together — the
+whole on-device stack, not just the app layer. The API container generates the
+synthetic corpus and builds both embedding indexes (text + CLIP image) on first boot
+if absent. A GitHub Actions workflow (`.github/workflows/ci.yml`) regenerates the
+corpus, runs the full test suite, runs the entire eval harness, reports drift between
+freshly generated `eval/results/` and what's committed (via `git diff`, in the job
+summary), and separately type-checks and builds the React UI, on every push — CI has
+no Ollama/LLM credential available at all, so it's also a continuous check that every
+LLM-gated code path degrades to its rule-based fallback correctly, not just in theory.
 
 **Caveat, stated plainly:** the Docker setup is reviewed but not run end-to-end in
 this environment — Docker Desktop's daemon would not start; its own logs show
@@ -456,6 +624,15 @@ work with a key. Stated plainly, per script:
 | `eval/feedback_loop_demo.py` (§4.5) | No | N/A |
 | `eval/latency_comparison.py` (§5.4) | Yes, heavily — the always-full-pipeline arm forces an LLM explanation + query-enrichment call on *every* query regardless of difficulty | **No** — attempted twice; both runs (even reduced to 24 queries × 2 users) stalled past 18 minutes with almost no CPU time used, consistent with the Gemini SDK's own internal retry/backoff compounding with this project's retry wrapper (`app/llm_client.py`) rather than either failing outright. Killed rather than left running indefinitely; numbers shown are the original fallback-only run. |
 | `eval/baseline_comparison.py` (§5.5) | Yes, same reason as latency_comparison | **No** — not attempted after latency_comparison's stall, to avoid repeating the same failure mode |
+| `eval/local_vs_cloud.py` (§5.6) | Yes, by design — both backends | **Local: yes, in full** (49-query routing accuracy; retrieval-quality reduced to n=5 after a resource-accumulation hang at full scope, reliably reproduced). **Cloud: partial** — routing accuracy not independently re-measured (see §5.6's note on why that number would be trivial anyway); retrieval-quality reuses §3.3's already-real 42-run hard-tier result rather than re-fighting the rate limit for a redundant number |
+| `eval/image_content_search.py` (§3.4) | No (image_search.py's CLIP embedding is local-only and not LLM-gated at all — it runs on the fast/standard/deep tiers alike once wired into fusion) | N/A, unaffected by any backend choice |
+
+Table note: this project's LLM backend is no longer solely "Gemini or nothing" — the
+above predates the on-device pivot (§5.6) and used "LLM-enabled" to mean specifically
+Gemini/cloud, back when that was the only real LLM path available. Everything in this
+table remains accurate as a historical record of what was and wasn't regenerated with
+a *cloud* key; the local backend (now the default) has no rate limit and is exercised
+by the full test suite and most eval scripts on every run, cloud key or not.
 
 The honest summary: the two results that most directly depend on genuine LLM
 reasoning quality (retrieval enrichment, router-agreement ground truth) **are** real,
@@ -487,6 +664,16 @@ baseline pays that same per-call cost on every single query, deep-routed or not.
 - **Rate limits materially shaped what could be measured** — see §8.1 for exactly
   which numbers that affected. A production system would need a paid tier or request
   pacing to run this evaluation suite at a normal cadence.
+- **An unresolved hang affects long-running local-backend batches specifically** (not
+  the cloud rate-limit issue — a separate thing, isolated during §5.6's benchmarking):
+  a single `run_query()` call and small batches (5 queries) complete reliably every
+  time, but a 42-call sequential loop within one long-lived Python process hung
+  indefinitely with zero CPU/network activity on repeated attempts. Root cause not
+  fully isolated (a resource-accumulation issue across many sequential local-model
+  calls in one process is the leading hypothesis, based on the symptom pattern — no
+  network connection, no CPU use, no error), worked around by using smaller batches
+  rather than fixed. Worth a real investigation before this system runs long batch
+  jobs (e.g. bulk re-indexing with LLM-based content generation) unattended.
 - **Next steps, in priority order:** (1) collect real feedback at small scale to
   validate §4.5's round-by-round improvement holds beyond a synthetic simulation, (2)
   expand the router's labeled set past 49 examples, (3) run the real-data connector

@@ -65,3 +65,36 @@ class TestReranker:
         scores = [r.score for r in reranked]
         assert scores == sorted(scores, reverse=True)
         assert all(0.0 <= s <= 1.0 for s in scores)
+
+    def test_image_sourced_candidates_bypass_cross_encoder(self):
+        """A candidate whose only evidence is a CLIP visual match must keep its
+        original score/identity rather than being re-scored by the text-only
+        cross-encoder, which never sees the actual pixels — see reranker.py's
+        module docstring for the eval finding this fixed."""
+        image_candidate = ScoredFile(
+            file_id=1, score=0.91, source="hybrid",
+            explanation="RRF fusion of ['image_semantic']",
+        )
+        text_candidate = ScoredFile(
+            file_id=2, score=0.5, source="hybrid",
+            explanation="RRF fusion of ['keyword', 'semantic']",
+        )
+        reranked = rerank("some query", [image_candidate, text_candidate])
+
+        by_id = {r.file_id: r for r in reranked}
+        assert by_id[1].score == 0.91  # untouched
+        assert by_id[1].source == "hybrid"
+        assert by_id[2].source == "reranker"  # actually went through the cross-encoder
+
+    def test_all_image_sourced_candidates_never_calls_cross_encoder(self, monkeypatch):
+        def _fail(*args, **kwargs):
+            raise AssertionError("cross-encoder should not be invoked for pure-image candidate sets")
+
+        monkeypatch.setattr("app.retrieval.reranker._get_cross_encoder", _fail)
+
+        candidates = [
+            ScoredFile(file_id=1, score=0.8, source="hybrid", explanation="RRF fusion of ['image_semantic']"),
+            ScoredFile(file_id=2, score=0.6, source="hybrid", explanation="RRF fusion of ['image_semantic']"),
+        ]
+        reranked = rerank("a photo with a blue triangle", candidates)
+        assert [r.file_id for r in reranked] == [1, 2]

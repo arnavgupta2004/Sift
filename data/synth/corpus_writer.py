@@ -97,8 +97,60 @@ _PALETTE = [
     (171, 71, 188), (0, 172, 193), (255, 112, 67), (57, 73, 171),
 ]
 
+# A large, saturated, high-contrast shape drawn prominently in every generated image —
+# distinct from the small background decoration shapes below. This is what makes
+# eval/local_vs_cloud.py's (and REPORT.md's) image-content-search queries a genuine
+# test of CLIP visual matching rather than a trivial one: base CLIP doesn't reliably
+# read the caption text burned into the bottom banner, so "an image with a large red
+# circle" can only be answered correctly by actually looking at the pixels.
+SUBJECT_SHAPES = ["circle", "square", "triangle", "star"]
+SUBJECT_COLORS: dict[str, tuple[int, int, int]] = {
+    "red": (214, 40, 40),
+    "blue": (37, 90, 214),
+    "green": (42, 157, 87),
+    "yellow": (232, 194, 40),
+    "purple": (149, 62, 191),
+    "orange": (235, 130, 39),
+}
 
-def write_png(path: Path, caption: str, rng: random.Random) -> None:
+
+def _draw_subject(draw, shape: str, color: tuple[int, int, int], cx: int, cy: int, r: int) -> None:
+    if shape == "circle":
+        draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color)
+    elif shape == "square":
+        draw.rectangle([cx - r, cy - r, cx + r, cy + r], fill=color)
+    elif shape == "triangle":
+        draw.polygon([(cx, cy - r), (cx - r, cy + r), (cx + r, cy + r)], fill=color)
+    elif shape == "star":
+        import math
+
+        points = []
+        for i in range(10):
+            angle = math.pi / 5 * i - math.pi / 2
+            radius = r if i % 2 == 0 else r * 0.45
+            points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+        draw.polygon(points, fill=color)
+
+
+def pick_subject(seed_key: str) -> tuple[str, str]:
+    """Deterministic shape+color pair derived from a stable hash of `seed_key`
+    (typically the filename) — NOT the shared per-file rng stream, deliberately: this
+    is called from the same code path as every other random content decision for the
+    corpus, and consuming extra draws from that shared rng would shift every
+    subsequent file's generated content for the same --seed, silently breaking
+    reproducibility of the already-committed Phase 1-16 eval numbers. A stable
+    filename-derived hash keeps subject assignment fully deterministic and reproducible
+    on its own, with zero cross-talk with the rest of the generator."""
+    import hashlib
+
+    digest = hashlib.md5(seed_key.encode()).hexdigest()
+    local_rng = random.Random(int(digest, 16))
+    shape = local_rng.choice(SUBJECT_SHAPES)
+    color_name = local_rng.choice(list(SUBJECT_COLORS))
+    return shape, color_name
+
+
+def write_png(path: Path, caption: str, rng: random.Random, subject: tuple[str, str] | None = None) -> None:
     from PIL import Image, ImageDraw
 
     width, height = 640, 400
@@ -106,7 +158,7 @@ def write_png(path: Path, caption: str, rng: random.Random) -> None:
     img = Image.new("RGB", (width, height), color=bg)
     draw = ImageDraw.Draw(img)
 
-    # A few simple shapes so images aren't visually identical within a topic.
+    # A few small shapes so images aren't visually identical within a topic.
     for _ in range(rng.randint(3, 6)):
         shape_color = tuple(min(255, c + rng.randint(-40, 60)) for c in bg)
         x0, y0 = rng.randint(0, width - 100), rng.randint(0, height - 100)
@@ -115,6 +167,9 @@ def write_png(path: Path, caption: str, rng: random.Random) -> None:
             draw.rectangle([x0, y0, x1, y1], fill=shape_color)
         else:
             draw.ellipse([x0, y0, x1, y1], fill=shape_color)
+
+    shape_name, color_name = subject if subject else pick_subject(caption)
+    _draw_subject(draw, shape_name, SUBJECT_COLORS[color_name], cx=width // 2, cy=height // 2 - 20, r=90)
 
     wrapped = caption if len(caption) < 60 else caption[:57] + "..."
     draw.rectangle([0, height - 40, width, height], fill=(0, 0, 0))
