@@ -11,10 +11,10 @@ export function PersonalizationPanel({ insights, loading }: Props) {
 
   return (
     <div className="panel">
-      <h3>Personalization insights</h3>
+      <h3>Made for you</h3>
 
       <div className="insight-block">
-        <span className="insight-label">Preferred file types</span>
+        <span className="insight-label">Files you use most</span>
         <div className="chip-row">
           {insights.preferred_file_types.length === 0 && <span className="muted">none yet</span>}
           {insights.preferred_file_types.map((t) => (
@@ -26,7 +26,7 @@ export function PersonalizationPanel({ insights, loading }: Props) {
       </div>
 
       <div className="insight-block">
-        <span className="insight-label">Most accessed files</span>
+        <span className="insight-label">Frequently opened</span>
         <ul className="insight-list">
           {insights.top_files_by_frequency.map((f) => (
             <li key={f.file_id}>
@@ -37,7 +37,7 @@ export function PersonalizationPanel({ insights, loading }: Props) {
       </div>
 
       <div className="insight-block">
-        <span className="insight-label">Recurring patterns detected</span>
+        <span className="insight-label">Your usual times</span>
         {insights.recurring_patterns.length === 0 && <span className="muted">none detected</span>}
         <ul className="insight-list">
           {insights.recurring_patterns.map((p, i) => (
@@ -51,7 +51,7 @@ export function PersonalizationPanel({ insights, loading }: Props) {
 
       {insights.active_context_boost_now && (
         <div className="context-boost-banner">
-          Right now matches a recurring pattern — {insights.active_context_files.length} usual file
+          We noticed a familiar time pattern — {insights.active_context_files.length} usual file
           {insights.active_context_files.length === 1 ? '' : 's'} boosted: {insights.active_context_files.join(', ')}
         </div>
       )}

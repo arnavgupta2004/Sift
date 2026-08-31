@@ -17,7 +17,7 @@ export function ResultsList({ results, userId, query }: Props) {
   }
 
   if (results.length === 0) {
-    return <p className="empty-state">No results yet — run a query.</p>
+    return <p className="empty-state">Start with a search above. Your best matches will show up here.</p>
   }
 
   return (
@@ -34,7 +34,7 @@ export function ResultsList({ results, userId, query }: Props) {
               <div className="result-score-bar-fill" style={{ width: `${Math.min(100, r.score * 100)}%` }} />
             </div>
             <details className="result-why">
-              <summary>Why this ranked here</summary>
+              <summary>Why this may be the one</summary>
               <p className="result-why-detail">{r.explanation}</p>
             </details>
           </div>

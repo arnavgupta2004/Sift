@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { getPersonalization, listUsers } from './api'
 import { streamQuery } from './api'
-import { BaselineChart } from './components/BaselineChart'
 import { IndexFolder } from './components/IndexFolder'
 import { PersonalizationPanel } from './components/PersonalizationPanel'
 import { ResultsList } from './components/ResultsList'
@@ -10,15 +9,15 @@ import { TracePanel } from './components/TracePanel'
 import type { PersonalizationInsights, ResultItem, RoutingTraceData, StageTrace, UserSummary } from './types'
 
 const EXAMPLE_QUERIES = [
-  'open q3_revenue_report.xlsx',
-  'find my recent notes about transformers',
-  "find that thing I was working on with my advisor about audio deepfakes a few weeks ago",
+  'Find my latest presentation',
+  'Show spreadsheets I used recently',
+  'Find the notes about my project from last week',
 ]
 
 function App() {
   const [users, setUsers] = useState<UserSummary[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
-  const [query, setQuery] = useState(EXAMPLE_QUERIES[2])
+  const [query, setQuery] = useState('')
 
   const [tier, setTier] = useState<string | null>(null)
   const [rationale, setRationale] = useState('')
@@ -40,7 +39,7 @@ function App() {
         setUsers(u)
         if (u.length > 0) setSelectedUserId(u[0].id)
       })
-      .catch(() => setApiError('Cannot reach the API. Is `uvicorn app.api:app` running on :8000?'))
+      .catch(() => setApiError('Sift cannot connect right now. Please make sure the Sift service is running, then refresh this page.'))
   }, [])
 
   useEffect(() => {
@@ -93,67 +92,93 @@ function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>Sift</h1>
-        <p className="app-subtitle">Agentic file recommendation and retrieval — live routing, personalized, explained.</p>
+        <div className="brand-mark" aria-hidden="true">S</div>
+        <div>
+          <h1>Sift</h1>
+          <p className="app-subtitle">Find the right file, even when you only remember part of it.</p>
+        </div>
       </header>
 
       {apiError && <div className="error-banner">{apiError}</div>}
 
+      <section className="search-hero">
+        <div className="search-copy">
+          <h2>What are you looking for?</h2>
+          <p>Use everyday words. Try a name, topic, file type, or when you last used it.</p>
+        </div>
+        <div className="query-bar">
+          <span className="search-icon" aria-hidden="true">⌕</span>
+          <input
+            className="query-input"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && runQuery()}
+            placeholder="e.g. the budget spreadsheet I opened last month"
+            aria-label="Describe the file you want to find"
+          />
+          <button className="run-button" onClick={runQuery} disabled={isStreaming || !query.trim() || selectedUserId === null}>
+            {isStreaming ? 'Finding files…' : 'Find files'}
+          </button>
+        </div>
+        <div className="example-area">
+          <span>Try:</span>
+          {EXAMPLE_QUERIES.map((q) => (
+            <button key={q} className="example-chip" onClick={() => setQuery(q)}>
+              {q}
+            </button>
+          ))}
+        </div>
+        <div className="search-options">
+          <label className="profile-picker">
+            <span>Personalize for</span>
+            <select
+              value={selectedUserId ?? ''}
+              onChange={(e) => setSelectedUserId(Number(e.target.value))}
+              className="user-select"
+              aria-label="Choose the profile whose file history should personalize results"
+            >
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </label>
+          <span className="privacy-note">Your files stay on this device.</span>
+        </div>
+      </section>
+
       <IndexFolder />
 
-      <div className="query-bar panel">
-        <select
-          value={selectedUserId ?? ''}
-          onChange={(e) => setSelectedUserId(Number(e.target.value))}
-          className="user-select"
-        >
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name} ({u.persona_key})
-            </option>
-          ))}
-        </select>
-        <input
-          className="query-input"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && runQuery()}
-          placeholder="Search your files…"
-        />
-        <button className="run-button" onClick={runQuery} disabled={isStreaming}>
-          {isStreaming ? 'Running…' : 'Search'}
-        </button>
-      </div>
-
-      <div className="example-queries">
-        {EXAMPLE_QUERIES.map((q) => (
-          <button key={q} className="example-chip" onClick={() => setQuery(q)}>
-            {q}
-          </button>
-        ))}
-      </div>
-
       <div className="main-grid">
-        <div className="main-column">
-          <TracePanel
-            tier={tier}
-            rationale={rationale}
-            stagesByName={stagesByName}
-            isStreaming={isStreaming}
-            finalTrace={finalTrace}
-          />
-
-          <div className="panel">
-            <h3>Results {results.length > 0 && `(${results.length})`}</h3>
+        <main className="main-column">
+          <section className="results-panel panel" aria-live="polite">
+            <div className="results-heading">
+              <div>
+                <h2>{isStreaming ? 'Looking through your files…' : results.length ? 'Recommended files' : 'Your recommendations will appear here'}</h2>
+                <p>{lastQuery && !isStreaming ? `Results for “${lastQuery}”` : 'Search by what you remember — Sift handles the rest.'}</p>
+              </div>
+              {results.length > 0 && <span className="results-count">{results.length} found</span>}
+            </div>
             <ResultsList results={results} userId={selectedUserId ?? 0} query={lastQuery} />
-          </div>
+          </section>
 
-          <BaselineChart />
-        </div>
+          {(tier || finalTrace) && (
+            <details className="advanced-details">
+              <summary>How Sift found these files</summary>
+              <p>This is the technical search path used for this request.</p>
+              <TracePanel
+                tier={tier}
+                rationale={rationale}
+                stagesByName={stagesByName}
+                isStreaming={isStreaming}
+                finalTrace={finalTrace}
+              />
+            </details>
+          )}
+        </main>
 
-        <div className="side-column">
+        <aside className="side-column">
           <PersonalizationPanel insights={insights} loading={insightsLoading} />
-        </div>
+        </aside>
       </div>
     </div>
   )

@@ -48,9 +48,8 @@ export function IndexFolder({ onIndexed }: Props) {
       {open && (
         <div className="index-folder-body">
           <p className="index-folder-description">
-            This crawls a directory on <em>this machine</em> (wherever the backend process runs — works on
-            Windows, macOS, or Linux, since it's a plain filesystem walk, not a browser upload) and indexes
-            real files alongside or instead of the synthetic demo corpus.
+            Choose a folder on this computer. Sift reads its file names and contents so you can search them
+            using normal language.
           </p>
 
           <div className="index-folder-suggestions">
@@ -75,7 +74,7 @@ export function IndexFolder({ onIndexed }: Props) {
               max={5000}
               value={maxFiles}
               onChange={(e) => setMaxFiles(Number(e.target.value))}
-              title="Max files to index"
+              aria-label="Maximum number of files to add"
             />
           </div>
 
@@ -85,7 +84,7 @@ export function IndexFolder({ onIndexed }: Props) {
               checked={clearExisting}
               onChange={(e) => setClearExisting(e.target.checked)}
             />
-            Replace existing corpus (uncheck to add alongside the synthetic demo files)
+            Start fresh and replace the current files
           </label>
 
           <button className="run-button" onClick={handleIndex} disabled={busy || !root.trim()}>
@@ -96,11 +95,11 @@ export function IndexFolder({ onIndexed }: Props) {
 
           {result && (
             <div className="index-folder-result">
-              Indexed <strong>{result.n_files_crawled}</strong> files from <code>{result.root}</code> —{' '}
+              Ready to search: <strong>{result.n_files_crawled}</strong> files added from <code>{result.root}</code> —{' '}
               {Object.entries(result.by_type)
                 .map(([type, count]) => `${count} .${type}`)
                 .join(', ')}
-              . Semantic index now covers <strong>{result.n_indexed_total}</strong> files total.
+              . <strong>{result.n_indexed_total}</strong> files are now searchable.
             </div>
           )}
         </div>

@@ -1,42 +1,42 @@
 :root {
-  --bg: #fafafa;
-  --panel-bg: #ffffff;
-  --border: #e9e9ec;
-  --text: #1c1c1f;
-  --text-muted: #75757e;
-  --accent: #5b5bd6;
-  --accent-soft: #eeeefc;
+  --bg: #f7f8ff;
+  --panel-bg: rgba(255, 255, 255, 0.88);
+  --border: rgba(102, 110, 166, 0.16);
+  --text: #1e2542;
+  --text-muted: #66708b;
+  --accent: #5965d9;
+  --accent-soft: #edf0ff;
   --success: #1a9e6b;
   --success-soft: #eafaf3;
   --warning: #b7791f;
   --warning-soft: #fdf3e3;
   --danger: #d1414a;
   --danger-soft: #fcedee;
-  --code-bg: #f4f4f6;
-  --shadow-sm: 0 1px 2px rgba(20, 20, 25, 0.04);
-  --shadow-md: 0 2px 10px rgba(20, 20, 25, 0.06);
+  --code-bg: #f2f4fc;
+  --shadow-sm: 0 10px 32px rgba(56, 68, 127, 0.07);
+  --shadow-md: 0 18px 44px rgba(56, 68, 127, 0.12);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #131316;
-    --panel-bg: #1a1a1e;
-    --border: #2b2b30;
-    --text: #f0f0f2;
-    --text-muted: #96969e;
-    --accent: #9191f0;
-    --accent-soft: #24243d;
+    --bg: #111525;
+    --panel-bg: rgba(25, 31, 54, 0.87);
+    --border: rgba(177, 190, 255, 0.14);
+    --text: #f2f4ff;
+    --text-muted: #aab2ca;
+    --accent: #9aa5ff;
+    --accent-soft: #252c52;
     --success: #3ecb92;
     --success-soft: #133228;
     --warning: #e0af5a;
     --warning-soft: #3a2c12;
     --danger: #ea7b81;
     --danger-soft: #3a1e20;
-    --code-bg: #202024;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 2px 10px rgba(0, 0, 0, 0.28);
+    --code-bg: #202744;
+    --shadow-sm: 0 10px 32px rgba(0, 0, 0, 0.24);
+    --shadow-md: 0 18px 44px rgba(0, 0, 0, 0.32);
   }
 }
 
@@ -46,9 +46,25 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 8% 8%, rgba(143, 164, 255, 0.25), transparent 25rem),
+    radial-gradient(circle at 92% 16%, rgba(197, 160, 255, 0.20), transparent 24rem),
+    radial-gradient(circle at 52% 100%, rgba(125, 209, 200, 0.16), transparent 27rem),
+    var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  background-image: linear-gradient(rgba(95, 107, 180, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(95, 107, 180, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to bottom, #000, transparent 75%);
 }
 
 code {
