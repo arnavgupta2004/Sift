@@ -600,9 +600,21 @@ Pulling the findings together rather than restating them:
   to get right without real usage data, and §4.5 is the actual resolution: the
   learned ranker's value shows up over rounds of real feedback, which is the only
   regime a hand-tuned blend can never operate in.
-- **Two of the four bugs found while building this were only found because the eval
-  harness existed** (§5.2, and the volume-mount bug in §6.3) — this is the argument
-  for building the harness first and treating it as load-bearing, not decorative.
+- **Most of the bugs found while building this were only found because the eval
+  harness (or a live end-to-end demo) existed**, not because they were anticipated in
+  advance: two routing bugs (§5.2), a volume-mount bug (§6.3), a reranker that
+  discarded correct CLIP matches because it can't see pixels (§3.4), chromadb's
+  telemetry silently contradicting "runs on-device" (§5.6), and a bulk-content-
+  generation script that got 100x slower the moment a local LLM became unconditionally
+  "available" (§5.6). None of these were found by reasoning about the code in the
+  abstract — they were found by running it, measuring it, or trying to demo it live,
+  and that is the actual argument for building the harness first and treating it as
+  load-bearing, not decorative.
+- **On-device is a real tradeoff, stated plainly, not split the difference on**
+  (§5.6): the local model measurably trails the cloud model on both routing accuracy
+  and retrieval-relevant reasoning. The honest framing isn't "on-device is just as
+  good" — it's "this is what fully offline, zero-cost, zero-rate-limit costs in
+  quality, and here's the number."
 
 ## 8. Limitations and future work
 
@@ -684,10 +696,14 @@ baseline pays that same per-call cost on every single query, deep-routed or not.
 
 The three objectives map to three components that are each independently justified by
 a reproducible benchmark: retrieval quality that improves in a specific, ablation-
-measured way as components are added; a personalization layer whose static form has a
-real, honestly-reported limitation and whose learned form demonstrably overcomes it
-through feedback; and a router that measurably agrees with real LLM judgment most of
-the time while making a fraction of the LLM calls a naive implementation would. The
-throughline across all of it is that every number here came from running code, not
-from describing what the code should do — including the numbers that didn't come out
-looking good.
+measured way as components are added — and now extends past text into image content,
+found genuinely missing and closed with a local CLIP model; a personalization layer
+whose static form has a real, honestly-reported limitation and whose learned form
+demonstrably overcomes it through feedback; and a router that measurably agrees with
+real LLM judgment most of the time while making a fraction of the LLM calls a naive
+implementation would, running that judgment itself on a 1.5B model on the same
+machine, no API key required. The throughline across all of it is that every number
+here came from running code, not from describing what the code should do — including
+the numbers that didn't come out looking good, and including the ones that only
+existed because running the code live surfaced a bug reasoning about it never would
+have.
