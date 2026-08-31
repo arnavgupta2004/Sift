@@ -45,6 +45,15 @@ class TestPersonalizationEndpoint:
         assert "active_context_boost_now" in body
 
 
+class TestBaselineComparisonEndpoint:
+    def test_returns_the_checked_in_summary(self):
+        resp = client.get("/api/eval/baseline-comparison")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "full_system" in body
+        assert "naive_keyword" in body
+
+
 class TestFeedbackEndpoint:
     def test_records_valid_feedback(self):
         resp = client.post(
