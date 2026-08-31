@@ -15,6 +15,8 @@ again later only touches this file.
 from __future__ import annotations
 
 import os
+import re
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -23,6 +25,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DEFAULT_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+MAX_RATE_LIMIT_RETRIES = 3
+_RETRY_DELAY_RE = re.compile(r"retryDelay['\"]?\s*:\s*['\"]?(\d+(?:\.\d+)?)s")
 
 
 @dataclass
@@ -60,18 +64,34 @@ class LLMClient:
                 "LLMClient.complete() called without GEMINI_API_KEY set. "
                 "Check client.is_available before calling, or set the env var."
             )
-        from google.genai import types
+        from google.genai import errors, types
 
         config = types.GenerateContentConfig(
             system_instruction=system or None,
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
-        response = self._client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config=config,
-        )
+
+        attempt = 0
+        while True:
+            try:
+                response = self._client.models.generate_content(
+                    model=self.model,
+                    contents=prompt,
+                    config=config,
+                )
+                break
+            except errors.ClientError as e:
+                # Free-tier quota (429 RESOURCE_EXHAUSTED) is routine, not exceptional,
+                # on the model this project runs against — retry with the delay the API
+                # itself suggests rather than failing the whole call (and, upstream, the
+                # whole route()/explain() step) on a transient rate limit.
+                if getattr(e, "code", None) != 429 or attempt >= MAX_RATE_LIMIT_RETRIES:
+                    raise
+                delay = _extract_retry_delay(str(e))
+                attempt += 1
+                time.sleep(delay)
+
         text = response.text or ""
         usage = response.usage_metadata
         return LLMCallResult(
@@ -80,6 +100,11 @@ class LLMClient:
             output_tokens=getattr(usage, "candidates_token_count", 0) or 0,
             model=self.model,
         )
+
+
+def _extract_retry_delay(error_text: str, default: float = 15.0) -> float:
+    match = _RETRY_DELAY_RE.search(error_text)
+    return float(match.group(1)) + 1.0 if match else default
 
 
 @lru_cache(maxsize=1)
