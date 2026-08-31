@@ -19,6 +19,22 @@ from app.models import FileRecord
 from app.retrieval.base import ScoredFile
 
 
+def exact_match(filename: str) -> ScoredFile | None:
+    """Direct DB lookup for a filename already recognized as an exact pattern by
+    query_understanding.py (case-insensitive). Used instead of relying on fuzzy
+    matching of the whole query sentence, which can rank a similarly-named file above
+    the one actually named — see app/agent/graph.py node_fast_retrieve."""
+    with get_session() as session:
+        rec = session.exec(
+            select(FileRecord).where(FileRecord.filename.ilike(filename))
+        ).first()
+    if rec is None or rec.id is None:
+        return None
+    return ScoredFile(
+        file_id=rec.id, score=1.0, source="filename", explanation=f"exact filename match: '{filename}'"
+    )
+
+
 def search(query: str, limit: int = 10, score_cutoff: float = 45.0) -> list[ScoredFile]:
     """Fuzzy-matches `query` against filename (weighted higher) and full path.
     score_cutoff is on rapidfuzz's 0-100 scale; results are returned with score in [0, 1].

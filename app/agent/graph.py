@@ -90,8 +90,19 @@ def node_fast_retrieve(state: GraphState) -> dict:
 
     with trace.stage("filename_search"):
         fname_results = filename_search.search(intent.raw_query, limit=CANDIDATE_POOL_SIZE)
+        if intent.exact_filename:
+            exact = filename_search.exact_match(intent.exact_filename)
+            if exact is not None:
+                fname_results = [exact] + [r for r in fname_results if r.file_id != exact.file_id]
 
-    if _has_filters(intent.filters):
+    if intent.exact_filename:
+        # The filename's own extension (e.g. ".pptx") can spuriously trigger a
+        # file-type filter match in extract_filters — running metadata_search on top
+        # of an already-resolved exact match would just flood the fusion with
+        # unrelated same-type files and dilute the one file actually named.
+        trace.skip("metadata_search", "exact filename already resolved deterministically")
+        meta_results = []
+    elif _has_filters(intent.filters):
         with trace.stage("metadata_search"):
             meta_results = metadata_search.search(intent.filters, limit=CANDIDATE_POOL_SIZE)
     else:
@@ -173,6 +184,18 @@ def node_deep_retrieve(state: GraphState) -> dict:
 
 def node_personalize(state: GraphState) -> dict:
     trace = state["trace"]
+
+    if state["intent"].exact_filename:
+        # An exact filename in the query is a deterministic ask for *that* file —
+        # personalization re-ranking would only risk bumping it out of the top slot
+        # for a user who happens to favor other files, which defeats the point of
+        # naming it. Skip re-ranking, keep retrieval order as-is.
+        trace.skip(
+            "personalization",
+            "query names an exact filename — skipped so the named file isn't outranked by unrelated user history",
+        )
+        return {"personalized": state["candidates"][:FINAL_RESULT_COUNT]}
+
     with trace.stage("personalization"):
         personalized = WeightedSumPersonalizer().rank(
             state["user_id"], state["candidates"], now=state["now"]

@@ -4,7 +4,7 @@ from app.agent.graph import run_query
 from app.agent.query_understanding import extract_entities
 from app.agent.router import route
 from app.db import get_session
-from app.models import UserRecord
+from app.models import FileRecord, UserRecord
 
 
 def _first_user_id() -> int:
@@ -92,3 +92,26 @@ class TestGraphEndToEnd:
         for r in out["results"]:
             assert {"file_id", "filename", "score", "explanation"} <= r.keys()
             assert 0.0 <= r["score"] <= 1.0  # convex blend of two [0,1] scores stays in [0,1]
+
+    def test_exact_filename_query_ranks_named_file_first_regardless_of_user(self):
+        # Regression test: personalization used to be able to bump the exact-named
+        # file out of first place for a user with unrelated access history, and a
+        # filename's own extension (e.g. ".pptx") used to spuriously trigger a
+        # metadata file-type filter that flooded the ranking with unrelated files.
+        with get_session() as session:
+            target = session.exec(select(FileRecord)).first()
+            all_user_ids = [u.id for u in session.exec(select(UserRecord)).all()]
+
+        query = f"open {target.filename}"
+        for uid in all_user_ids:
+            out = run_query(query, uid)
+            assert out["routing_trace"]["tier"] == "fast"
+            assert out["results"], f"expected results for {query!r}"
+            assert out["results"][0]["file_id"] == target.id, (
+                f"user {uid}: expected {target.filename} (id={target.id}) ranked first, "
+                f"got {out['results'][0]['filename']} (id={out['results'][0]['file_id']})"
+            )
+
+        skipped = {s["name"] for s in out["routing_trace"]["stages"] if s["skipped"]}
+        assert "metadata_search" in skipped
+        assert "personalization" in skipped

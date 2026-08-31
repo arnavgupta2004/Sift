@@ -30,6 +30,19 @@ class TestFilenameSearch:
         results = filename_search.search("report", limit=10)
         assert all(0.0 <= r.score <= 1.0 for r in results)
 
+    def test_exact_match_direct_lookup(self):
+        with get_session() as session:
+            some_file = session.exec(select(FileRecord)).first()
+
+        result = filename_search.exact_match(some_file.filename)
+
+        assert result is not None
+        assert result.file_id == some_file.id
+        assert result.score == 1.0
+
+    def test_exact_match_missing_filename_returns_none(self):
+        assert filename_search.exact_match("definitely_not_a_real_file.docx") is None
+
 
 class TestMetadataSearch:
     def test_file_type_filter_is_exact(self):
