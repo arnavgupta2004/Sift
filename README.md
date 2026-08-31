@@ -158,10 +158,16 @@ provider-agnostic — swapping backends only touches that one file. Set `GEMINI_
 (copy `.env.example`) to enable LLM-backed query enrichment, routing-classification fallback, and
 richer synthetic-content generation. **The system runs completely end-to-end without this set** —
 every LLM-gated step has a rule-based fallback. Most of this repo's eval numbers were generated
-without a key (rule-based fallback paths); the router-agreement numbers
-(`eval/router_labels.json`, `eval/results/router_agreement_summary.json`) and the live-demo
-screenshots were generated with a real `GEMINI_API_KEY` once one became available — see
-`REPORT.md` for which is which.
+without a key (rule-based fallback paths); the retrieval-quality and router-agreement numbers
+(`eval/router_labels.json`, `eval/results/router_agreement_summary.json`) were generated with a
+real `GEMINI_API_KEY` once one became available — see `REPORT.md` §8.1 for exactly which numbers
+are which.
+
+**Free-tier rate limits**: on `gemini-3.5-flash-lite`'s free tier (15 requests/minute), running
+`pytest` or the eval scripts with a key set can be noticeably slower — deep-route and borderline
+queries make real API calls, and the retry/backoff in `app/llm_client.py` can compound with the
+Gemini SDK's own internal retries under sustained load. For a fast local test run, unset the key
+for that one invocation: `GEMINI_API_KEY= pytest`.
 
 ## Reproducing every claim
 
