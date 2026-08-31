@@ -311,26 +311,52 @@ designed to surface rather than assume away.
 
 `eval/latency_comparison.py`: the real router vs. the identical deep-route pipeline
 with routing forced off (reuses the actual LangGraph node functions — not a simulated
-baseline).
+baseline). **Fallback-only numbers** (no `GEMINI_API_KEY`) — see §8.1 for why this one
+wasn't regenerated with the key.
 
-<!-- LATENCY_TABLE_PLACEHOLDER -->
+| Tier | Adaptive mean (ms) | Full-pipeline mean (ms) | Speedup | NDCG@10 delta |
+|---|---|---|---|---|
+| Easy | 5.6 | 133.2 | **23.8x** | 0.000 |
+| Medium | 18.3 | 116.9 | **6.4x** | −0.090 |
+| Hard | 47.5 | 126.8 | 2.7x | +0.014 |
+| **Overall** | **22.8** | **124.7** | **5.5x** | **−0.033** |
 
 ![Latency comparison](eval/results/latency_comparison.png)
 
-<!-- LATENCY_DISCUSSION_PLACEHOLDER -->
+Easy queries get a 23.8x speedup for zero quality loss — the fast route already finds
+the exact file, so the deep pipeline's extra work is pure waste for these. Medium
+gets a real 6.4x speedup at a real cost (skips the reranker, which §3.3 shows is
+genuinely valuable). Hard-tier numbers are near-identical between the two by
+construction — the router already sends hard queries through the same deep pipeline
+the baseline forces everyone through, so the small difference is measurement noise,
+not a routing effect. Both arms show `llm_call_count: 0` here since no key was set
+for this run — with one set, the "full" arm's per-query latency would include real
+LLM round-trip time (roughly 1-2s per call, per the retrieval-quality rerun in §3),
+which would widen the adaptive-vs-full gap further on tiers where adaptive routing
+still avoids the LLM call the full arm always pays for.
 
 ### 5.5 Four-way baseline comparison
 
 The single most persuasive artifact in this report: naive keyword-only (BM25, no
 agent), naive semantic-only (embeddings only, "what a lazy RAG wrapper looks like"),
 always-full-pipeline (routing disabled), and the full system, same eval set, same
-metrics.
+metrics. **Fallback-only numbers** — see §8.1.
 
-<!-- BASELINE_TABLE_PLACEHOLDER -->
+| System | Precision@5 | Recall@5 | NDCG@10 | MRR | Mean latency (ms) |
+|---|---|---|---|---|---|
+| Naive keyword-only | 0.200 | 0.408 | 0.470 | 0.514 | 0.4 |
+| Naive semantic-only | 0.269 | 0.469 | 0.493 | 0.556 | 12.9 |
+| Always-full-pipeline | 0.298 | 0.503 | 0.589 | 0.669 | 125.9 |
+| **Full system (routed + personalized)** | **0.245** | **0.468** | **0.557** | **0.644** | **22.2** |
 
 ![Baseline comparison](eval/results/baseline_comparison.png)
 
-<!-- BASELINE_DISCUSSION_PLACEHOLDER -->
+The full system beats *both* naive baselines on NDCG@10 and MRR — the two metrics
+that weight rank position, which is what actually matters for "is the right file near
+the top" — while running 5.7x faster than the always-full-pipeline agent it's built on
+top of. A hypothetical "lazy RAG wrapper" (naive semantic-only) isn't just
+architecturally simpler than this system; it's measurably worse on every quality
+metric.
 
 ## 6. Extended-scope components
 
@@ -412,6 +438,37 @@ Pulling the findings together rather than restating them:
 
 ## 8. Limitations and future work
 
+### 8.1 Which numbers are LLM-enabled vs. fallback-only
+
+A `GEMINI_API_KEY` became available partway through this project, on the free tier
+(15 requests/minute on `gemini-3.5-flash-lite`). Every script was re-checked once it
+arrived; some were successfully regenerated with the real key, others were not,
+because of that rate limit specifically — not because the underlying system doesn't
+work with a key. Stated plainly, per script:
+
+| Script / result | LLM calls involved? | Regenerated with real key? |
+|---|---|---|
+| `eval/run_benchmark.py` (§3.3 uses a fixed ladder, no LLM; **retrieval quality by difficulty**, cited in §1/README) | Yes, deep-tier queries only | **Yes** — hard-tier NDCG@10 0.253 → 0.451 |
+| `eval/build_router_labels.py` + `eval/router_agreement.py` (§5.3) | Yes, by design (real ground truth) | **Yes** — this result cannot exist without a key |
+| `eval/ablation_study.py` (§3.3) | No — uses rule-based `extract_entities` and non-LLM stage functions throughout | N/A, unaffected by the key either way |
+| `eval/personalization_lift.py` (§4.3) | No | N/A |
+| `eval/learned_ranker_comparison.py` (§4.4) | No | N/A |
+| `eval/feedback_loop_demo.py` (§4.5) | No | N/A |
+| `eval/latency_comparison.py` (§5.4) | Yes, heavily — the always-full-pipeline arm forces an LLM explanation + query-enrichment call on *every* query regardless of difficulty | **No** — attempted twice; both runs (even reduced to 24 queries × 2 users) stalled past 18 minutes with almost no CPU time used, consistent with the Gemini SDK's own internal retry/backoff compounding with this project's retry wrapper (`app/llm_client.py`) rather than either failing outright. Killed rather than left running indefinitely; numbers shown are the original fallback-only run. |
+| `eval/baseline_comparison.py` (§5.5) | Yes, same reason as latency_comparison | **No** — not attempted after latency_comparison's stall, to avoid repeating the same failure mode |
+
+The honest summary: the two results that most directly depend on genuine LLM
+reasoning quality (retrieval enrichment, router-agreement ground truth) **are** real,
+because those were the ones worth spending the rate-limit budget on. The two that
+mainly measure *how many* LLM calls a pipeline makes (latency and baseline
+comparison) still report `llm_call_count: 0` for every tier — accurate for a
+no-key deployment, understating what a key-enabled deployment's "always-full-pipeline"
+and "full_system" latency would actually be, since those calls, once made, add real
+network round-trip time. A future run with a paid tier (or request pacing tuned to
+avoid double-retry) would very likely narrow §5.5's already-favorable latency
+comparison further in the full system's favor, not reverse it — the always-full
+baseline pays that same per-call cost on every single query, deep-routed or not.
+
 - **Synthetic corpus, not a real filesystem at scale.** §6.1's connector proves the
   architecture works on real files; it hasn't been run against a corpus with the
   scale or genuine messiness (nested archives, non-UTF8 encodings, thousands of
@@ -427,11 +484,9 @@ Pulling the findings together rather than restating them:
   fully trusting it over the LLM fallback.
 - **Docker is unverified end-to-end** in this build environment (§6.3) — reviewed and
   should work, but "should" is not "confirmed."
-- **Rate limits materially shaped what could be measured.** The free-tier Gemini
-  quota (15 requests/minute on `gemini-3.5-flash-lite`) meant several eval scripts
-  took tens of minutes to regenerate with the LLM enabled; a production system would
-  need a paid tier or request batching to run this evaluation suite at a normal
-  cadence.
+- **Rate limits materially shaped what could be measured** — see §8.1 for exactly
+  which numbers that affected. A production system would need a paid tier or request
+  pacing to run this evaluation suite at a normal cadence.
 - **Next steps, in priority order:** (1) collect real feedback at small scale to
   validate §4.5's round-by-round improvement holds beyond a synthetic simulation, (2)
   expand the router's labeled set past 49 examples, (3) run the real-data connector

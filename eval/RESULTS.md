@@ -26,16 +26,19 @@ against the labeled eval set.
 | Difficulty | Precision@5 | Recall@5 | NDCG@10 | MRR | n |
 |---|---|---|---|---|---|
 | Easy (exact filename) | 0.200 | 1.000 | 1.000 | 1.000 | 15 |
-| Medium (type+topic filter) | 0.340 | 0.239 | 0.436 | 0.604 | 20 |
-| Hard (vague/paraphrased) | 0.157 | 0.223 | 0.253 | 0.318 | 14 |
-| **Overall** | **0.245** | **0.468** | **0.557** | **0.644** | 49 |
+| Medium (type+topic filter) | 0.340 | 0.239 | 0.437 | 0.604 | 20 |
+| Hard (vague/paraphrased) | 0.324 | 0.400 | 0.451 | 0.502 | 14 |
+| **Overall** | **0.293** | **0.518** | **0.613** | **0.696** | 49 |
 
 Easy-query Precision@5 of 0.2 is the *ceiling*, not a weak score — each easy query has
 exactly one ground-truth file, so 1 hit in a 5-slot window is 0.2 by construction; the
 matching Recall@5/NDCG@10/MRR of 1.0 confirm the target file is found and ranked first
-every time. Quality decreases monotonically with difficulty on every metric, which is
-the expected and desired shape: harder, vaguer queries are a genuinely harder problem,
-not a bug.
+every time. Quality still decreases with difficulty on every metric, the expected and
+desired shape — harder, vaguer queries are a genuinely harder problem, not a bug — but
+the gap between medium and hard is smaller than it might look: this run has
+`GEMINI_API_KEY` set, so hard-tier (deep-route) queries get real LLM query enrichment
+before retrieval, not the rule-based fallback. That enrichment step measurably earns
+its cost — see the note below.
 
 ![Retrieval quality by difficulty](results/retrieval_quality.png)
 
@@ -46,6 +49,14 @@ with unrelated history, and a filename's own extension (e.g. `.pptx` in
 flooded the fast route with unrelated same-type files. Both are fixed (see git history
 on `app/agent/graph.py`) with regression tests; easy-query MRR went from 0.29 to the
 1.00 shown above.
+
+**With vs. without the LLM key** (hard tier only — the other tiers make zero LLM calls
+regardless): before a `GEMINI_API_KEY` was available, hard-tier numbers were
+Precision@5 0.157 / Recall@5 0.223 / NDCG@10 0.253 / MRR 0.318, using the rule-based
+query-enrichment fallback. With a real key, real LLM query rewriting lifts those to
+the 0.324 / 0.400 / 0.451 / 0.502 shown in the table — a genuine, measured
+improvement from that one LLM-gated step, not just a different run. See `REPORT.md`
+§8 for which other numbers in this repo still reflect fallback-only behavior.
 
 ## 2. Ablation: marginal contribution of each component
 
@@ -84,6 +95,11 @@ Same eval set, two systems: the real router (`app/agent/router.py`) vs. the iden
 deep-route pipeline with routing forced off (reuses the actual LangGraph node
 functions — not a simulated baseline).
 
+> **Fallback-only numbers** (no `GEMINI_API_KEY`, `llm_call_count: 0` throughout) —
+> unlike §1's retrieval-quality numbers, this table was not regenerated once a key
+> became available; see `REPORT.md` §8.1 for exactly why (rate-limit stalls, not a
+> system limitation) and what a key-enabled rerun would likely change.
+
 | Tier | Adaptive mean (ms) | Full-pipeline mean (ms) | Speedup | NDCG@10 delta |
 |---|---|---|---|---|
 | Easy | 5.6 | 133.2 | **23.8x** | 0.000 |
@@ -115,7 +131,8 @@ components run on which tier.
 
 ## 4. Baseline comparison — the one table
 
-Four systems, same eval set, same metrics:
+Four systems, same eval set, same metrics. **Fallback-only numbers** — see §3's note
+and `REPORT.md` §8.1.
 
 | System | Precision@5 | Recall@5 | NDCG@10 | MRR | Mean latency (ms) |
 |---|---|---|---|---|---|
