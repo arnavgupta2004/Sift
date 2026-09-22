@@ -18,7 +18,7 @@ Requires:
 Writes eval/results/local_vs_cloud_summary.json and eval/results/local_vs_cloud.png.
 
 --- Why this runs each (backend, phase) in its own subprocess ---
-Root-caused via instrumented runs (RSS/FD/thread tracking, see REPORT.md section 8.1):
+Root-caused via instrumented runs (RSS/FD/thread tracking, see docs/REPORT.md section 8.1):
 a single long-lived process making many sequential local-model calls to Ollama is
 fine up to roughly 40-50 calls (confirmed: an isolated 42-call retrieval-quality run
 completes cleanly every time, with flat FD/thread counts throughout). But run routing

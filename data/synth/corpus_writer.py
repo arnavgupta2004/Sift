@@ -99,7 +99,7 @@ _PALETTE = [
 
 # A large, saturated, high-contrast shape drawn prominently in every generated image —
 # distinct from the small background decoration shapes below. This is what makes
-# eval/local_vs_cloud.py's (and REPORT.md's) image-content-search queries a genuine
+# eval/local_vs_cloud.py's (and docs/REPORT.md's) image-content-search queries a genuine
 # test of CLIP visual matching rather than a trivial one: base CLIP doesn't reliably
 # read the caption text burned into the bottom banner, so "an image with a large red
 # circle" can only be answered correctly by actually looking at the pixels.

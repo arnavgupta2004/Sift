@@ -18,7 +18,7 @@ Two backends, selected by LLM_BACKEND (default "local"):
     rest of the system uses its rule-based fallback path.
 
 Model choice for the local backend (qwen2.5:1.5b) was picked empirically, not by
-default assumption — see eval/local_vs_cloud.py and REPORT.md for the 3-model
+default assumption — see eval/local_vs_cloud.py and docs/REPORT.md for the 3-model
 benchmark (qwen2.5:1.5b vs. llama3.2:1b vs. phi3:mini) this default is based on.
 """
 

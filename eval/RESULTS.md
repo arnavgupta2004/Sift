@@ -55,7 +55,7 @@ regardless): before a `GEMINI_API_KEY` was available, hard-tier numbers were
 Precision@5 0.157 / Recall@5 0.223 / NDCG@10 0.253 / MRR 0.318, using the rule-based
 query-enrichment fallback. With a real key, real LLM query rewriting lifts those to
 the 0.324 / 0.400 / 0.451 / 0.502 shown in the table — a genuine, measured
-improvement from that one LLM-gated step, not just a different run. See `REPORT.md`
+improvement from that one LLM-gated step, not just a different run. See `docs/REPORT.md`
 §8 for which other numbers in this repo still reflect fallback-only behavior.
 
 ## 2. Ablation: marginal contribution of each component
@@ -97,7 +97,7 @@ functions — not a simulated baseline).
 
 > **Fallback-only numbers** (no `GEMINI_API_KEY`, `llm_call_count: 0` throughout) —
 > unlike §1's retrieval-quality numbers, this table was not regenerated once a key
-> became available; see `REPORT.md` §8.1 for exactly why (rate-limit stalls, not a
+> became available; see `docs/REPORT.md` §8.1 for exactly why (rate-limit stalls, not a
 > system limitation) and what a key-enabled rerun would likely change.
 
 | Tier | Adaptive mean (ms) | Full-pipeline mean (ms) | Speedup | NDCG@10 delta |
@@ -132,7 +132,7 @@ components run on which tier.
 ## 4. Baseline comparison — the one table
 
 Four systems, same eval set, same metrics. **Fallback-only numbers** — see §3's note
-and `REPORT.md` §8.1.
+and `docs/REPORT.md` §8.1.
 
 | System | Precision@5 | Recall@5 | NDCG@10 | MRR | Mean latency (ms) |
 |---|---|---|---|---|---|

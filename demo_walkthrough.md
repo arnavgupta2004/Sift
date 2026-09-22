@@ -114,7 +114,7 @@ keyword-only, naive semantic-only ("what a lazy RAG wrapper looks like"),
 always-full-pipeline, and the full system — this project beats both naive baselines
 on quality while running a fraction of the always-full-pipeline's latency. If asked
 "how do you know the personalization/routing/on-device-LLM tradeoff actually hold
-up," this panel and `eval/RESULTS.md` / `REPORT.md` are the answer — every number on
+up," this panel and `eval/RESULTS.md` / `docs/REPORT.md` are the answer — every number on
 screen came from a script in `eval/`, not a slide, including the local-vs-cloud model
 comparison (`eval/local_vs_cloud.py`) and the image-content-search benchmark
 (`eval/image_content_search.py`).

@@ -8,7 +8,7 @@ will get matched."
 
 Kept as a separate, standalone eval script — NOT part of eval/eval_set.json /
 build_eval_set.py — so it's purely additive and doesn't touch the existing harness's
-reproducibility of the Phase 1-16 numbers already in REPORT.md.
+reproducibility of the Phase 1-16 numbers already in docs/REPORT.md.
 
 Two things are measured:
   1. image_search.search() in isolation — does CLIP content-matching work at all.

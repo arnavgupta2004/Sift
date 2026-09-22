@@ -1,0 +1,762 @@
+<title>Sift Architecture</title>
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --surface: #ffffff;
+    --surface-2: #eceef4;
+    --border: #dbe0ea;
+    --text: #171b26;
+    --text-muted: #5a6379;
+    --accent: #3454d1;
+    --accent-soft: #e8ecfc;
+    --fast: #1a9e6b;
+    --fast-soft: #e3f6ec;
+    --standard: #3454d1;
+    --standard-soft: #e8ecfc;
+    --deep: #b1690f;
+    --deep-soft: #faecd9;
+    --code-bg: #12172a;
+    --code-text: #d7deee;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0e16;
+      --surface: #131728;
+      --surface-2: #1a2036;
+      --border: #262d45;
+      --text: #eef0f8;
+      --text-muted: #96a0bd;
+      --accent: #7c93ff;
+      --accent-soft: #1c2450;
+      --fast: #3ecb92;
+      --fast-soft: #123226;
+      --standard: #7c93ff;
+      --standard-soft: #1c2450;
+      --deep: #e0a659;
+      --deep-soft: #3a2a10;
+      --code-bg: #05070d;
+      --code-text: #c9d2e6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0e16;
+    --surface: #131728;
+    --surface-2: #1a2036;
+    --border: #262d45;
+    --text: #eef0f8;
+    --text-muted: #96a0bd;
+    --accent: #7c93ff;
+    --accent-soft: #1c2450;
+    --fast: #3ecb92;
+    --fast-soft: #123226;
+    --standard: #7c93ff;
+    --standard-soft: #1c2450;
+    --deep: #e0a659;
+    --deep-soft: #3a2a10;
+    --code-bg: #05070d;
+    --code-text: #c9d2e6;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 0 20px;
+    padding-block: 48px 80px;
+  }
+  .page { max-width: 980px; margin: 0 auto; }
+
+  header.hero { margin-bottom: 44px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(1.7rem, 4vw, 2.35rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .dek {
+    color: var(--text-muted);
+    font-size: 1.02rem;
+    line-height: 1.6;
+    max-width: 66ch;
+    margin: 0 0 20px;
+  }
+  .factrow {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .fact {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 13px;
+  }
+  .fact b { color: var(--text); font-weight: 600; }
+
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin: 28px 0 0;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  nav.toc a {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  nav.toc a:hover { color: var(--accent); }
+  nav.toc a b { color: var(--accent); font-weight: 600; margin-right: 5px; }
+
+  section { margin-top: 64px; scroll-margin-top: 20px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+  }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    flex: none;
+  }
+  h2 {
+    font-family: var(--mono);
+    font-size: 1.28rem;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .sec-intro {
+    color: var(--text-muted);
+    line-height: 1.65;
+    max-width: 72ch;
+    margin: 16px 0 24px;
+    font-size: 0.96rem;
+  }
+  .sec-intro code, p code, li code {
+    font-family: var(--mono);
+    font-size: 0.87em;
+    background: var(--surface-2);
+    padding: 0.12em 0.4em;
+    border-radius: 4px;
+  }
+
+  figure { margin: 0 0 10px; }
+  .diagram-frame {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    padding: 18px;
+    overflow-x: auto;
+  }
+  .diagram-frame svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  figcaption {
+    margin-top: 10px;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    line-height: 1.55;
+    max-width: 76ch;
+  }
+  figcaption b { color: var(--text); font-weight: 600; }
+
+  /* SVG diagram styling */
+  .dg-box { fill: var(--surface-2); stroke: var(--border); stroke-width: 1.5; }
+  .dg-box-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  .dg-box-fast { fill: var(--fast-soft); stroke: var(--fast); stroke-width: 1.5; }
+  .dg-box-standard { fill: var(--standard-soft); stroke: var(--standard); stroke-width: 1.5; }
+  .dg-box-deep { fill: var(--deep-soft); stroke: var(--deep); stroke-width: 1.5; }
+  .dg-title { fill: var(--text); font: 600 13.5px var(--mono); }
+  .dg-title-sm { fill: var(--text); font: 600 12px var(--mono); }
+  .dg-sub { fill: var(--text-muted); font: 400 11px var(--sans); }
+  .dg-label { fill: var(--text-muted); font: 500 10.5px var(--mono); }
+  .dg-label-accent { fill: var(--accent); font: 600 10.5px var(--mono); }
+  .dg-tag { font: 600 10px var(--mono); }
+  .dg-edge { stroke: var(--text-muted); stroke-width: 1.4; fill: none; }
+  .dg-edge-dashed { stroke: var(--text-muted); stroke-width: 1.4; fill: none; stroke-dasharray: 4 3; }
+  .dg-edge-accent { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+  .dg-edge-fast { stroke: var(--fast); stroke-width: 1.8; fill: none; }
+  .dg-edge-standard { stroke: var(--standard); stroke-width: 1.8; fill: none; }
+  .dg-edge-deep { stroke: var(--deep); stroke-width: 1.8; fill: none; }
+
+  /* tables */
+  .datatable { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .datatable th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .datatable td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    color: var(--text);
+  }
+  .datatable td.muted, .datatable td span.muted { color: var(--text-muted); }
+  .datatable code { font-family: var(--mono); font-size: 0.88em; background: var(--surface-2); padding: 0.1em 0.35em; border-radius: 4px; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  .table-wrap .datatable { min-width: 480px; }
+  .table-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .table-grid { grid-template-columns: 1fr; } }
+  .table-card-title {
+    font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+    padding: 12px 14px 0; color: var(--text);
+  }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 14px 0 22px; font-size: 0.82rem; color: var(--text-muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  footer {
+    margin-top: 72px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-family: var(--mono);
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
+<div class="page">
+
+  <header class="hero">
+    <p class="eyebrow">System architecture — Sift</p>
+    <h1>Agentic file recommendation &amp; retrieval, traced end to end</h1>
+    <p class="dek">
+      Five diagrams of the actual running system, drawn from <code>app/agent/graph.py</code>,
+      <code>app/api.py</code>, and <code>docker-compose.yml</code> — not a conceptual sketch.
+      The centerpiece is the router: the same query takes a 3-node path or a 9-node path
+      through the exact same graph, and which one it takes is the whole latency story.
+    </p>
+    <div class="factrow">
+      <span class="fact">10-node <b>LangGraph</b> StateGraph</span>
+      <span class="fact">3-tier router: <b>fast / standard / deep</b></span>
+      <span class="fact">5 retrievers → <b>RRF</b> fusion</span>
+      <span class="fact">LLM default: <b>on-device (Ollama)</b></span>
+      <span class="fact">4 Compose services, ordered boot</span>
+    </div>
+
+    <nav class="toc" aria-label="Section contents">
+      <a href="#overview"><b>01</b>Request lifecycle</a>
+      <a href="#routing"><b>02</b>Three-tier routing</a>
+      <a href="#retrieval"><b>03</b>Retrieval &amp; fusion</a>
+      <a href="#llm"><b>04</b>LLM backend switch</a>
+      <a href="#deploy"><b>05</b>Deployment topology</a>
+      <a href="#data"><b>06</b>Data model</a>
+    </nav>
+  </header>
+
+  <!-- ============================================================ -->
+  <section id="overview">
+    <div class="sec-head"><span class="sec-num">01</span><h2>Request lifecycle</h2></div>
+    <p class="sec-intro">
+      The React UI never talks to retrieval, personalization, or the LLM directly — it
+      only ever calls five FastAPI routes. Every one of those routes that answers a
+      query does it by invoking the <em>same</em> compiled LangGraph, once
+      synchronously (<code>/api/query</code>) and once as a live stream
+      (<code>/api/query/stream</code>, which drives the UI's trace panel off
+      <code>graph.stream()</code> directly — not a simulated progress bar).
+    </p>
+
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 920 616" role="img" aria-label="A query travels from the React UI through FastAPI into one LangGraph orchestrator, which dispatches to retrieval, personalization, and the LLM backend; retrieval and personalization read from a shared storage layer, which is separately populated by an ingest step from either the synthetic generator or a real filesystem folder.">
+          <defs>
+            <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"/>
+            </marker>
+          </defs>
+
+          <!-- UI -->
+          <rect class="dg-box" x="260" y="16" width="400" height="54" rx="10"/>
+          <text class="dg-title" x="460" y="38" text-anchor="middle">React UI — Vite</text>
+          <text class="dg-sub" x="460" y="56" text-anchor="middle">query bar · live trace panel · SSE client</text>
+
+          <line class="dg-edge" x1="460" y1="70" x2="460" y2="98" marker-end="url(#ar1)"/>
+          <text class="dg-label" x="472" y="88">GET /api/query/stream</text>
+
+          <!-- API -->
+          <rect class="dg-box" x="140" y="98" width="640" height="92" rx="10"/>
+          <text class="dg-title" x="162" y="120">FastAPI — app/api.py</text>
+          <rect x="162" y="132" width="118" height="21" rx="5" class="dg-box-accent"/>
+          <text class="dg-label-accent" x="221" y="146.5" text-anchor="middle">/api/query</text>
+          <rect x="288" y="132" width="150" height="21" rx="5" class="dg-box-accent"/>
+          <text class="dg-label-accent" x="363" y="146.5" text-anchor="middle">/api/query/stream</text>
+          <rect x="446" y="132" width="104" height="21" rx="5" class="dg-box-accent"/>
+          <text class="dg-label-accent" x="498" y="146.5" text-anchor="middle">/api/ingest</text>
+          <rect x="162" y="159" width="118" height="21" rx="5" class="dg-box-accent"/>
+          <text class="dg-label-accent" x="221" y="173.5" text-anchor="middle">/api/feedback</text>
+          <rect x="288" y="159" width="188" height="21" rx="5" class="dg-box-accent"/>
+          <text class="dg-label-accent" x="382" y="173.5" text-anchor="middle">/api/personalization/&#123;id&#125;</text>
+
+          <line class="dg-edge" x1="460" y1="190" x2="460" y2="220" marker-end="url(#ar1)"/>
+          <text class="dg-label" x="472" y="210">run_query() / graph.stream()</text>
+
+          <!-- Orchestrator -->
+          <rect class="dg-box-accent" x="180" y="220" width="560" height="56" rx="10"/>
+          <text class="dg-title" x="460" y="243" text-anchor="middle">LangGraph orchestrator — app/agent/graph.py</text>
+          <text class="dg-sub" x="460" y="261" text-anchor="middle">10 explicit nodes · one RoutingTrace threaded through every stage</text>
+
+          <line class="dg-edge" x1="330" y1="276" x2="170" y2="308" marker-end="url(#ar1)"/>
+          <line class="dg-edge" x1="460" y1="276" x2="460" y2="308" marker-end="url(#ar1)"/>
+          <line class="dg-edge" x1="600" y1="276" x2="760" y2="308" marker-end="url(#ar1)"/>
+
+          <!-- Subsystems -->
+          <rect class="dg-box" x="20" y="308" width="290" height="78" rx="10"/>
+          <text class="dg-title-sm" x="40" y="330">Retrieval</text>
+          <text class="dg-sub" x="40" y="348">filename · metadata · keyword</text>
+          <text class="dg-sub" x="40" y="363">(BM25) · semantic · image (CLIP)</text>
+          <text class="dg-sub" x="40" y="378">→ RRF fusion → rerank (deep only)</text>
+
+          <rect class="dg-box" x="330" y="308" width="270" height="78" rx="10"/>
+          <text class="dg-title-sm" x="350" y="330">Personalization</text>
+          <text class="dg-sub" x="350" y="348">WeightedSumPersonalizer ⇄</text>
+          <text class="dg-sub" x="350" y="363">LightGBM LearnedRanker</text>
+          <text class="dg-sub" x="350" y="378">behind one BasePersonalizer</text>
+
+          <rect class="dg-box" x="620" y="308" width="280" height="78" rx="10"/>
+          <text class="dg-title-sm" x="640" y="330">LLM backend</text>
+          <text class="dg-sub" x="640" y="348">app/llm_client.py — single</text>
+          <text class="dg-sub" x="640" y="363">chokepoint for every LLM call,</text>
+          <text class="dg-sub" x="640" y="378">local/cloud switch (see §04)</text>
+
+          <!-- reads -->
+          <line class="dg-edge" x1="165" y1="386" x2="165" y2="428" marker-end="url(#ar1)"/>
+          <line class="dg-edge" x1="465" y1="386" x2="465" y2="428" marker-end="url(#ar1)"/>
+          <text class="dg-label" x="330" y="412" text-anchor="middle">reads</text>
+
+          <!-- Storage -->
+          <rect class="dg-box" x="20" y="428" width="880" height="62" rx="10"/>
+          <text class="dg-title-sm" x="40" y="452">Storage</text>
+          <text class="dg-sub" x="40" y="470">SQLite: files · users · access_log · feedback_log</text>
+          <text class="dg-sub" x="420" y="470">Chroma text (384-d, all-MiniLM-L6-v2)</text>
+          <text class="dg-sub" x="680" y="470">Chroma image (512-d, CLIP ViT-B/32)</text>
+
+          <!-- ingest -->
+          <line class="dg-edge-dashed" x1="460" y1="546" x2="460" y2="492" marker-end="url(#ar1)"/>
+          <text class="dg-label" x="472" y="524">ingest (write — one-time / on-demand)</text>
+
+          <!-- Data sources -->
+          <rect class="dg-box" x="20" y="546" width="880" height="54" rx="10"/>
+          <text class="dg-title-sm" x="40" y="568">Data sources</text>
+          <text class="dg-sub" x="40" y="586">Synthetic corpus generator (default demo)  ·  Filesystem connector — POST /api/ingest, crawls a real folder on any OS</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Figure 1.</b> FastAPI is a thin transport layer: every query-answering route
+        drives the same compiled graph. Retrieval and personalization <em>read</em>
+        storage at query time; the LLM backend touches no storage at all. Data only
+        enters storage through a separate, explicit ingest step — never inline with a
+        search.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="routing">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Three-tier routing</h2></div>
+    <p class="sec-intro">
+      This is the graph's actual branch structure, node for node. The router
+      (<code>app/agent/router.py</code>) picks a tier from cheap rule-based signals
+      first; only a genuinely borderline query ever reaches a classifier, and that
+      classifier is tried cheap-first too — a trained <em>learned router</em> before
+      the real LLM. The three lanes below aren't a simplification: <code>fast</code>
+      skips straight from retrieval to a rule-based explanation with zero LLM calls;
+      <code>deep</code> is the only lane that ever calls the LLM, and it calls it twice.
+    </p>
+
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--fast)"></i><code>fast</code> — exact filename or clean filter, ≤9 words</span>
+      <span><i class="swatch" style="background:var(--standard)"></i><code>standard</code> — learned router (conf ≥ 0.6) or LLM classify</span>
+      <span><i class="swatch" style="background:var(--deep)"></i><code>deep</code> — vague/conversational, or ≥14 words</span>
+    </div>
+
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 1340 440" role="img" aria-label="The route decision fans into three lanes of different length: fast has the fewest nodes and zero LLM calls, standard adds two more retrievers and RRF fusion but still zero LLM calls, and deep is the only lane with an LLM query-enrichment step, a cross-encoder rerank, and an LLM explanation step, for two LLM calls total.">
+          <defs>
+            <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"/>
+            </marker>
+          </defs>
+
+          <!-- common prefix -->
+          <rect class="dg-box" x="20" y="180" width="110" height="44" rx="9"/>
+          <text class="dg-title-sm" x="75" y="207" text-anchor="middle">query</text>
+
+          <line class="dg-edge" x1="130" y1="202" x2="158" y2="202" marker-end="url(#ar2)"/>
+          <rect class="dg-box" x="158" y="180" width="150" height="44" rx="9"/>
+          <text class="dg-title-sm" x="233" y="203" text-anchor="middle">extract_entities</text>
+          <text class="dg-sub" x="233" y="217" text-anchor="middle">filters, exact filename, vague markers</text>
+
+          <line class="dg-edge" x1="308" y1="202" x2="336" y2="202" marker-end="url(#ar2)"/>
+          <rect class="dg-box-accent" x="336" y="176" width="110" height="52" rx="9"/>
+          <text class="dg-title-sm" x="391" y="200" text-anchor="middle">route()</text>
+          <text class="dg-sub" x="391" y="216" text-anchor="middle">decision</text>
+
+          <!-- branches -->
+          <path class="dg-edge-fast" d="M446,190 C470,150 470,60 494,50" marker-end="url(#ar2)"/>
+          <text class="dg-label" x="470" y="120" fill="var(--fast)">exact filename, or clean</text>
+          <text class="dg-label" x="470" y="132" fill="var(--fast)">filter ≤9 words</text>
+
+          <path class="dg-edge-standard" d="M446,202 C468,202 468,202 494,202" marker-end="url(#ar2)"/>
+          <text class="dg-label" x="488" y="196" text-anchor="end" fill="var(--standard)">borderline</text>
+
+          <path class="dg-edge-deep" d="M446,214 C470,260 470,340 494,354" marker-end="url(#ar2)"/>
+          <text class="dg-label" x="470" y="290" fill="var(--deep)">vague marker, or</text>
+          <text class="dg-label" x="470" y="302" fill="var(--deep)">&#8805;14 words</text>
+
+          <!-- FAST lane y~26-86 -->
+          <rect class="dg-box-fast" x="494" y="26" width="160" height="50" rx="9"/>
+          <text class="dg-title-sm" x="574" y="47" text-anchor="middle">fast_retrieve</text>
+          <text class="dg-sub" x="574" y="63" text-anchor="middle">filename + metadata → RRF</text>
+          <line class="dg-edge-fast" x1="654" y1="51" x2="864" y2="51" marker-end="url(#ar2)"/>
+          <rect class="dg-box-fast" x="864" y="26" width="120" height="50" rx="9"/>
+          <text class="dg-title-sm" x="924" y="51" text-anchor="middle">personalize</text>
+          <line class="dg-edge-fast" x1="984" y1="51" x2="1012" y2="51" marker-end="url(#ar2)"/>
+          <rect class="dg-box-fast" x="1012" y="26" width="150" height="50" rx="9"/>
+          <text class="dg-title-sm" x="1087" y="47" text-anchor="middle">explain_skip</text>
+          <text class="dg-sub" x="1087" y="63" text-anchor="middle">rule-based text</text>
+          <text class="dg-tag" x="864" y="16" fill="var(--fast)">FAST · 3 stages after routing · 0 LLM calls</text>
+
+          <!-- STANDARD lane y~177-237 -->
+          <rect class="dg-box-standard" x="494" y="177" width="160" height="50" rx="9"/>
+          <text class="dg-title-sm" x="574" y="198" text-anchor="middle">standard_retrieve</text>
+          <text class="dg-sub" x="574" y="214" text-anchor="middle">metadata+keyword+semantic</text>
+          <text class="dg-sub" x="574" y="226" text-anchor="middle">+image → RRF (no rerank)</text>
+          <line class="dg-edge-standard" x1="654" y1="202" x2="864" y2="202" marker-end="url(#ar2)"/>
+          <rect class="dg-box-standard" x="864" y="177" width="120" height="50" rx="9"/>
+          <text class="dg-title-sm" x="924" y="202" text-anchor="middle">personalize</text>
+          <line class="dg-edge-standard" x1="984" y1="202" x2="1012" y2="202" marker-end="url(#ar2)"/>
+          <rect class="dg-box-standard" x="1012" y="177" width="150" height="50" rx="9"/>
+          <text class="dg-title-sm" x="1087" y="198" text-anchor="middle">explain_skip</text>
+          <text class="dg-sub" x="1087" y="214" text-anchor="middle">rule-based text</text>
+          <text class="dg-tag" x="864" y="167" fill="var(--standard)">STANDARD · 3 stages · 0 LLM calls</text>
+
+          <!-- DEEP lane y~330-390, extra node -->
+          <rect class="dg-box-deep" x="494" y="330" width="150" height="50" rx="9"/>
+          <text class="dg-title-sm" x="569" y="351" text-anchor="middle">enrich_query</text>
+          <text class="dg-sub" x="569" y="367" text-anchor="middle">LLM query rewrite</text>
+          <line class="dg-edge-deep" x1="644" y1="355" x2="672" y2="355" marker-end="url(#ar2)"/>
+          <rect class="dg-box-deep" x="672" y="330" width="160" height="50" rx="9"/>
+          <text class="dg-title-sm" x="752" y="351" text-anchor="middle">deep_retrieve</text>
+          <text class="dg-sub" x="752" y="367" text-anchor="middle">+ RRF + cross-encoder rerank</text>
+          <line class="dg-edge-deep" x1="832" y1="355" x2="864" y2="355" marker-end="url(#ar2)"/>
+          <rect class="dg-box-deep" x="864" y="330" width="120" height="50" rx="9"/>
+          <text class="dg-title-sm" x="924" y="355" text-anchor="middle">personalize</text>
+          <line class="dg-edge-deep" x1="984" y1="355" x2="1012" y2="355" marker-end="url(#ar2)"/>
+          <rect class="dg-box-deep" x="1012" y="330" width="150" height="50" rx="9"/>
+          <text class="dg-title-sm" x="1087" y="351" text-anchor="middle">explain_llm</text>
+          <text class="dg-sub" x="1087" y="367" text-anchor="middle">LLM reasoning pass</text>
+          <text class="dg-tag" x="494" y="320" fill="var(--deep)">DEEP · 5 stages after routing · 2 LLM calls</text>
+
+          <!-- converge -->
+          <path class="dg-edge" d="M1162,51 C1200,51 1200,150 1220,180" marker-end="url(#ar2)"/>
+          <path class="dg-edge" d="M1162,202 C1200,202 1200,202 1220,202" marker-end="url(#ar2)"/>
+          <path class="dg-edge" d="M1162,355 C1200,355 1200,250 1220,224" marker-end="url(#ar2)"/>
+          <rect class="dg-box-accent" x="1220" y="177" width="110" height="52" rx="9"/>
+          <text class="dg-title-sm" x="1275" y="199" text-anchor="middle">finalize</text>
+          <text class="dg-sub" x="1275" y="215" text-anchor="middle">→ SSE "done"</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Figure 2.</b> The gap between column A and column C in the fast/standard
+        lanes is the point, not a layout accident — those lanes genuinely skip the
+        reranker and the LLM. Deep is the only lane that ever pays for
+        <code>enrich_query</code> or <code>explain_llm</code>; routing a query away from
+        it is the entire latency-savings argument this system measures in
+        <code>eval/latency_comparison.py</code>.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="retrieval">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Retrieval fan-out, fusion &amp; the rerank bypass</h2></div>
+    <p class="sec-intro">
+      Inside <code>standard_retrieve</code>/<code>deep_retrieve</code>, up to four
+      retrievers run independently and get merged by Reciprocal Rank Fusion — no
+      library, scores are rank-based so BM25 and cosine similarity never need to share
+      a scale. The one non-obvious branch: image-sourced candidates skip the
+      cross-encoder entirely. It was added after a real bug — the reranker only ever
+      sees <code>filename + extracted_text</code>, which for an image is just its
+      caption, so it was overriding correct CLIP visual matches with an irrelevant
+      text judgment (full-pipeline NDCG@10 on image queries was ~0.30 despite the
+      isolated CLIP retriever scoring ~0.83 on the same queries).
+    </p>
+
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 1020 400" role="img" aria-label="Four retrievers feed Reciprocal Rank Fusion. Text-and-metadata-sourced candidates continue into the cross-encoder reranker on the deep tier, but image-sourced candidates bypass the reranker entirely and rejoin the pipeline just before personalization, carrying their original fused score.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"/>
+            </marker>
+          </defs>
+
+          <!-- 4 retrievers -->
+          <rect class="dg-box" x="20" y="20" width="180" height="42" rx="8"/>
+          <text class="dg-title-sm" x="110" y="46" text-anchor="middle">metadata_search</text>
+          <rect class="dg-box" x="20" y="76" width="180" height="42" rx="8"/>
+          <text class="dg-title-sm" x="110" y="102" text-anchor="middle">keyword_search (BM25)</text>
+          <rect class="dg-box" x="20" y="132" width="180" height="42" rx="8"/>
+          <text class="dg-title-sm" x="110" y="158" text-anchor="middle">semantic_search</text>
+          <rect class="dg-box" x="20" y="188" width="180" height="42" rx="8"/>
+          <text class="dg-title-sm" x="110" y="214" text-anchor="middle">image_search (CLIP)</text>
+
+          <line class="dg-edge" x1="200" y1="41" x2="270" y2="120" marker-end="url(#ar3)"/>
+          <line class="dg-edge" x1="200" y1="97" x2="270" y2="128" marker-end="url(#ar3)"/>
+          <line class="dg-edge" x1="200" y1="153" x2="270" y2="140" marker-end="url(#ar3)"/>
+          <line class="dg-edge" x1="200" y1="209" x2="270" y2="148" marker-end="url(#ar3)"/>
+
+          <!-- RRF -->
+          <rect class="dg-box-accent" x="270" y="98" width="180" height="64" rx="9"/>
+          <text class="dg-title-sm" x="360" y="122" text-anchor="middle">RRF fusion</text>
+          <text class="dg-sub" x="360" y="138" text-anchor="middle">score = &#931; 1/(k+rank)</text>
+          <text class="dg-sub" x="360" y="152" text-anchor="middle">k = 60, per-list rank only</text>
+
+          <!-- split: text path to rerank -->
+          <line class="dg-edge" x1="450" y1="118" x2="500" y2="80" marker-end="url(#ar3)"/>
+          <rect class="dg-box" x="500" y="46" width="190" height="56" rx="9"/>
+          <text class="dg-title-sm" x="595" y="68" text-anchor="middle">cross-encoder rerank</text>
+          <text class="dg-sub" x="595" y="84" text-anchor="middle">deep tier only · joint (q, doc) scoring</text>
+          <text class="dg-label" x="460" y="34">text/keyword/semantic-sourced</text>
+
+          <!-- bypass: image path skips rerank -->
+          <path class="dg-edge-dashed" d="M450,140 C520,180 620,180 690,150" marker-end="url(#ar3)"/>
+          <text class="dg-label" x="510" y="196">image-sourced (CLIP) — bypasses rerank</text>
+          <text class="dg-label" x="510" y="209">keeps its fused score as-is</text>
+
+          <line class="dg-edge" x1="690" y1="74" x2="740" y2="120" marker-end="url(#ar3)"/>
+
+          <!-- personalize -->
+          <rect class="dg-box" x="740" y="98" width="180" height="64" rx="9"/>
+          <text class="dg-title-sm" x="830" y="122" text-anchor="middle">personalize</text>
+          <text class="dg-sub" x="830" y="138" text-anchor="middle">BasePersonalizer.rank()</text>
+          <text class="dg-sub" x="830" y="152" text-anchor="middle">skipped if exact_filename hit</text>
+
+          <line class="dg-edge" x1="920" y1="130" x2="960" y2="130" marker-end="url(#ar3)"/>
+          <text class="dg-label" x="930" y="122">top 10</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Figure 3.</b> The dashed arrow is the fix, drawn explicitly: an image match
+        that skipped the reranker still reaches <code>personalize</code> with its
+        original CLIP-informed score, instead of being re-scored on caption text it was
+        never selected for.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="llm">
+    <div class="sec-head"><span class="sec-num">04</span><h2>LLM backend: one chokepoint, two providers</h2></div>
+    <p class="sec-intro">
+      Every LLM call in the system — router fallback classification, deep-tier query
+      enrichment, deep-tier explanation generation, and synthetic data generation —
+      goes through exactly one function, so the "fast route makes zero LLM calls"
+      claim is auditable rather than asserted. <code>LLM_BACKEND</code> is read fresh
+      from the environment on every call, not frozen at import, and defaults to
+      <code>local</code> per the course constraint that the primary system run fully
+      on-device.
+    </p>
+
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 900 250" role="img" aria-label="Four call sites across the codebase all call get_client() in app/llm_client.py, which reads the LLM_BACKEND environment variable on every call and dispatches to either a local Ollama backend or an optional cloud Gemini backend.">
+          <defs>
+            <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"/>
+            </marker>
+          </defs>
+
+          <rect class="dg-box" x="20" y="16" width="180" height="38" rx="8"/>
+          <text class="dg-sub" x="110" y="39" text-anchor="middle">router._llm_classify()</text>
+          <rect class="dg-box" x="20" y="62" width="180" height="38" rx="8"/>
+          <text class="dg-sub" x="110" y="85" text-anchor="middle">query_understanding.enrich_with_llm()</text>
+          <rect class="dg-box" x="20" y="108" width="180" height="38" rx="8"/>
+          <text class="dg-sub" x="110" y="131" text-anchor="middle">explain.generate_explanations()</text>
+          <rect class="dg-box" x="20" y="154" width="180" height="38" rx="8"/>
+          <text class="dg-sub" x="110" y="177" text-anchor="middle">generate_synthetic_data.py</text>
+
+          <line class="dg-edge" x1="200" y1="35" x2="300" y2="100" marker-end="url(#ar4)"/>
+          <line class="dg-edge" x1="200" y1="81" x2="300" y2="105" marker-end="url(#ar4)"/>
+          <line class="dg-edge" x1="200" y1="127" x2="300" y2="110" marker-end="url(#ar4)"/>
+          <line class="dg-edge" x1="200" y1="173" x2="300" y2="115" marker-end="url(#ar4)"/>
+
+          <rect class="dg-box-accent" x="300" y="70" width="220" height="70" rx="10"/>
+          <text class="dg-title-sm" x="410" y="94" text-anchor="middle">get_client()</text>
+          <text class="dg-sub" x="410" y="110" text-anchor="middle">app/llm_client.py</text>
+          <text class="dg-sub" x="410" y="126" text-anchor="middle">reads LLM_BACKEND every call</text>
+
+          <line class="dg-edge-fast" x1="520" y1="92" x2="600" y2="50" marker-end="url(#ar4)"/>
+          <rect class="dg-box-fast" x="600" y="16" width="260" height="56" rx="9"/>
+          <text class="dg-title-sm" x="730" y="38" text-anchor="middle">Ollama — qwen2.5:1.5b</text>
+          <text class="dg-sub" x="730" y="54" text-anchor="middle">on-device · no network egress · no API key</text>
+          <text class="dg-label" x="596" y="66" text-anchor="end" fill="var(--fast)">local (default)</text>
+
+          <line class="dg-edge-deep" x1="520" y1="118" x2="600" y2="170" marker-end="url(#ar4)"/>
+          <rect class="dg-box-deep" x="600" y="150" width="260" height="56" rx="9"/>
+          <text class="dg-title-sm" x="730" y="172" text-anchor="middle">Gemini — gemini-2.5-flash</text>
+          <text class="dg-sub" x="730" y="188" text-anchor="middle">comparison arm · needs GEMINI_API_KEY</text>
+          <text class="dg-label" x="596" y="154" text-anchor="end" fill="var(--deep)">cloud (opt-in)</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Figure 4.</b> If a key is missing for whichever backend is selected,
+        <code>is_available</code> is simply <code>false</code> and every caller falls
+        back to its rule-based path — there is no silent cross-backend fallback.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="deploy">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Deployment topology</h2></div>
+    <p class="sec-intro">
+      Four Docker Compose services boot in a strict, health-gated order — not just
+      "started," but <em>ready</em>. <code>ollama-pull</code> is a one-shot init
+      container: it waits for Ollama's own healthcheck, pulls the model, and exits;
+      <code>api</code> then waits for that pull to <em>complete successfully</em>, not
+      merely for Ollama to be healthy, so the first real query never races a
+      still-downloading model.
+    </p>
+
+    <figure>
+      <div class="diagram-frame">
+        <svg viewBox="0 0 1080 190" role="img" aria-label="Four Compose services boot in sequence: ollama becomes healthy, then ollama-pull waits on that health check, pulls the model and exits successfully, then api waits on that completion before starting and exposes its own healthcheck, then frontend waits on api being healthy.">
+          <defs>
+            <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"/>
+            </marker>
+          </defs>
+
+          <text class="dg-label" x="250" y="18" text-anchor="middle">service_healthy</text>
+          <text class="dg-label" x="530" y="18" text-anchor="middle">service_completed_successfully</text>
+          <text class="dg-label" x="810" y="18" text-anchor="middle">service_healthy</text>
+
+          <rect class="dg-box" x="20" y="50" width="200" height="70" rx="10"/>
+          <text class="dg-title-sm" x="120" y="76" text-anchor="middle">ollama</text>
+          <text class="dg-sub" x="120" y="92" text-anchor="middle">:11434 · volume ollama_data</text>
+          <text class="dg-sub" x="120" y="106" text-anchor="middle">healthcheck: ollama list</text>
+
+          <line class="dg-edge" x1="220" y1="85" x2="280" y2="77" marker-end="url(#ar5)"/>
+
+          <rect class="dg-box" x="280" y="42" width="220" height="70" rx="10"/>
+          <text class="dg-title-sm" x="390" y="68" text-anchor="middle">ollama-pull</text>
+          <text class="dg-sub" x="390" y="84" text-anchor="middle">one-shot init container</text>
+          <text class="dg-sub" x="390" y="98" text-anchor="middle">pulls $OLLAMA_MODEL, exits</text>
+
+          <line class="dg-edge" x1="500" y1="77" x2="560" y2="85" marker-end="url(#ar5)"/>
+
+          <rect class="dg-box-accent" x="560" y="50" width="220" height="70" rx="10"/>
+          <text class="dg-title-sm" x="670" y="76" text-anchor="middle">api</text>
+          <text class="dg-sub" x="670" y="92" text-anchor="middle">:8000 · start_period 300s</text>
+          <text class="dg-sub" x="670" y="106" text-anchor="middle">healthcheck: GET /api/users</text>
+
+          <line class="dg-edge" x1="780" y1="85" x2="840" y2="85" marker-end="url(#ar5)"/>
+
+          <rect class="dg-box" x="840" y="50" width="220" height="70" rx="10"/>
+          <text class="dg-title-sm" x="950" y="76" text-anchor="middle">frontend</text>
+          <text class="dg-sub" x="950" y="92" text-anchor="middle">:5173 → container :80</text>
+          <text class="dg-sub" x="950" y="106" text-anchor="middle">static build, served by nginx</text>
+
+          <text class="dg-label" x="20" y="160">LLM_BACKEND, OLLAMA_HOST, OLLAMA_MODEL, GEMINI_API_KEY, GEMINI_MODEL — all injected into `api` from the environment, all optional except the local default.</text>
+        </svg>
+      </div>
+      <figcaption>
+        <b>Figure 5.</b> Verified in CI (local Docker Desktop was unavailable during
+        development): a dedicated GitHub Actions job runs <code>docker compose up</code>
+        on every push, polls <code>/api/users</code> for up to 15 minutes on a cold
+        cache, and round-trips a real query before tearing the stack down.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="data">
+    <div class="sec-head"><span class="sec-num">06</span><h2>Data model</h2></div>
+    <p class="sec-intro">
+      One SQLModel schema (<code>app/models.py</code>) backs both the synthetic demo
+      corpus and any real ingested folder — retrieval, personalization, and routing
+      code never touch a <code>DataSource</code> directly, only these rows. Vector
+      search lives in two <em>separate</em> Chroma collections, not one, because the
+      text and image embedders don't share a dimensionality.
+    </p>
+
+    <div class="table-grid">
+      <div class="table-wrap">
+        <div class="table-card-title">SQLite — app/models.py</div>
+        <table class="datatable">
+          <thead><tr><th>table</th><th>key columns</th></tr></thead>
+          <tbody>
+            <tr><td><code>files</code></td><td>filename, path, file_type <span class="muted">(idx)</span>, topic_cluster <span class="muted">(idx)</span>, extracted_text</td></tr>
+            <tr><td><code>users</code></td><td>name, persona_key <span class="muted">(idx)</span></td></tr>
+            <tr><td><code>access_log</code></td><td>user_id → users, file_id → files, action, timestamp <span class="muted">(idx)</span>, session_id</td></tr>
+            <tr><td><code>feedback_log</code></td><td>user_id → users, file_id → files, query, signal, timestamp <span class="muted">(idx)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <div class="table-card-title">Chroma vector stores</div>
+        <table class="datatable">
+          <thead><tr><th>collection</th><th>embedder</th></tr></thead>
+          <tbody>
+            <tr><td>text</td><td>all-MiniLM-L6-v2, <span class="muted">384-d</span></td></tr>
+            <tr><td>image</td><td>CLIP ViT-B/32, <span class="muted">512-d</span></td></tr>
+          </tbody>
+        </table>
+        <div class="table-card-title" style="margin-top:14px;">Feedback loop</div>
+        <table class="datatable">
+          <tbody>
+            <tr><td class="muted">POST /api/feedback</td><td>writes <code>feedback_log</code></td></tr>
+            <tr><td class="muted">personalization/retrain.py</td><td>refits LightGBM ranker on access_log + feedback (weighted 1.0 / 3.0)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Config reference — FAST_MAX_WORDS_FOR_FILTER_ONLY=9 · DEEP_MIN_WORDS=14 ·
+    LOW_CONFIDENCE_THRESHOLD=0.6 · CANDIDATE_POOL_SIZE=20 · FINAL_RESULT_COUNT=10 ·
+    RRF_K=60 · N_CLUSTERS=10 · RECENCY_HALF_LIFE_DAYS=14 · app/config.py
+  </footer>
+
+</div>

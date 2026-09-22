@@ -9,7 +9,7 @@ no API key required, nothing leaves the machine.
 
 > **Status: complete**, core system (build-order phases 1-9) and extended scope (LightGBM personalization
 > + closed feedback loop, learned router, real filesystem connector as the UI's primary data path,
-> production React/TS UI, Docker + CI, full written report) — see `REPORT.md`. Everything below is real,
+> production React/TS UI, Docker + CI, full written report) — see `docs/REPORT.md`. Everything below is real,
 > run, and verified — not aspirational.
 
 ## Headline numbers
@@ -33,7 +33,7 @@ commands in that file.
   matches because it only ever sees caption text, never pixels.
 - **Runs fully on-device by default** (Ollama, `qwen2.5:1.5b`, picked via a 3-model benchmark) — no API
   key, nothing leaves the machine. The local model trails a cloud model on both routing accuracy and
-  retrieval-quality-relevant reasoning, reported honestly rather than hidden — see `REPORT.md` §5.6.
+  retrieval-quality-relevant reasoning, reported honestly rather than hidden — see `docs/REPORT.md` §5.6.
 
 ## Why this exists (the three objectives)
 
@@ -177,7 +177,7 @@ ollama pull qwen2.5:1.5b
 
 `qwen2.5:1.5b` was picked empirically, not by default assumption — it benchmarked best of 3 candidates
 (qwen2.5:1.5b, llama3.2:1b, phi3:mini) on this project's actual routing/explanation tasks. See
-`REPORT.md` §5.6 and `eval/local_vs_cloud.py` for the full 3-model comparison and the on-device-vs-cloud
+`docs/REPORT.md` §5.6 and `eval/local_vs_cloud.py` for the full 3-model comparison and the on-device-vs-cloud
 tradeoff table.
 
 **The system runs completely end-to-end without Ollama running at all**, too — every LLM-gated step
@@ -187,7 +187,7 @@ An optional cloud comparison arm (Gemini) is still available — set `LLM_BACKEN
 `GEMINI_API_KEY` in `.env` — but it is never the default and the system never silently falls back to
 it. Most of this repo's eval numbers were generated with the local backend (the required default for
 grading); the retrieval-quality and router-agreement numbers were generated with the cloud backend
-specifically to establish real-LLM ground truth to compare the local model against — see `REPORT.md`
+specifically to establish real-LLM ground truth to compare the local model against — see `docs/REPORT.md`
 §8.1 and §5.6 for exactly which numbers are which and why.
 
 **Free-tier cloud rate limits** (only relevant if you explicitly opt into `LLM_BACKEND=cloud`): on

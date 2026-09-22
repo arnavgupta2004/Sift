@@ -60,7 +60,7 @@ class TestIngestEndpoint:
     logic is already covered in isolation by tests/test_datasources.py and
     tests/test_ingest_datasource.py; a real end-to-end run of this endpoint was also
     manually verified against a real ~300-file Downloads folder during development
-    (see REPORT.md)."""
+    (see docs/REPORT.md)."""
 
     def test_missing_root_returns_400(self, monkeypatch):
         def fake_init(self, root, max_files=None, exclude_dirs=None):

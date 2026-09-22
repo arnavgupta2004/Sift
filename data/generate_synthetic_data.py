@@ -204,7 +204,7 @@ def main() -> None:
             "prose through a single local on-device model call-by-call is genuinely "
             "slow (each call is real inference, not instant) — expect tens of minutes "
             "for the full corpus, vs. seconds for the template generator. The template "
-            "generator is what every reproducibility claim in REPORT.md is based on; "
+            "generator is what every reproducibility claim in docs/REPORT.md is based on; "
             "this flag is for demonstrating richer content on a smaller --num-files run."
         ),
     )
