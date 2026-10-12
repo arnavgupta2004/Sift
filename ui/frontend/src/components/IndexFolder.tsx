@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ingestFolder } from '../api'
+import { FolderBrowser } from './FolderBrowser'
 import type { IngestResult } from '../types'
 
 const SUGGESTED_ROOTS = ['~/Downloads', '~/Documents', '~/Desktop']
@@ -10,6 +11,7 @@ interface Props {
 
 export function IndexFolder({ onIndexed }: Props) {
   const [open, setOpen] = useState(false)
+  const [browsing, setBrowsing] = useState(false)
   const [root, setRoot] = useState('')
   const [maxFiles, setMaxFiles] = useState<number | null>(null)
   const [clearExisting, setClearExisting] = useState(false)
@@ -67,6 +69,9 @@ export function IndexFolder({ onIndexed }: Props) {
               onChange={(e) => setRoot(e.target.value)}
               placeholder="/Users/you/Downloads or C:\\Users\\you\\Documents"
             />
+            <button className="example-chip" onClick={() => setBrowsing((v) => !v)}>
+              Browse…
+            </button>
             <input
               className="index-folder-maxfiles"
               type="number"
@@ -78,6 +83,17 @@ export function IndexFolder({ onIndexed }: Props) {
               title="Optional limit — leave empty to index the whole folder"
             />
           </div>
+
+          {browsing && (
+            <FolderBrowser
+              startPath={root.trim() || undefined}
+              onChoose={(p) => {
+                setRoot(p)
+                setBrowsing(false)
+              }}
+              onCancel={() => setBrowsing(false)}
+            />
+          )}
 
           <label className="index-folder-checkbox">
             <input

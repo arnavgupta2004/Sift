@@ -1,5 +1,6 @@
 import type {
   BaselineComparison,
+  BrowseResult,
   IngestResult,
   PersonalizationInsights,
   SSEEvent,
@@ -79,4 +80,14 @@ export function streamQuery(
   }
 
   return () => source.close()
+}
+
+export async function browseFolder(path?: string): Promise<BrowseResult> {
+  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
+  const res = await fetch(`/api/browse${qs}`)
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(body.detail ?? 'Cannot open that folder')
+  }
+  return res.json()
 }

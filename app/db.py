@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
 from sqlmodel import Session, create_engine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = REPO_ROOT / "data" / "db.sqlite"
+# Everything generated or indexed at runtime (SQLite DB, Chroma indexes, synthetic corpus) lives
+# under DATA_DIR. Override with SIFT_DATA_DIR to keep e.g. the test corpus separate from a real
+# folder index in the default data/ directory.
+DATA_DIR = (REPO_ROOT / Path(os.environ.get("SIFT_DATA_DIR", "data")).expanduser()).resolve()
+DEFAULT_DB_PATH = DATA_DIR / "db.sqlite"
 
 
 @lru_cache(maxsize=8)

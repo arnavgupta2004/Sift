@@ -21,6 +21,7 @@ dist/
 data/db.sqlite
 data/image_subjects.json
 data/chroma/
+data_test/
 data/files_corpus/
 *.db-journal
 

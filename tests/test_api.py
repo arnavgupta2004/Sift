@@ -20,6 +20,31 @@ class TestUsersEndpoint:
         }
 
 
+class TestBrowseEndpoint:
+    def test_lists_only_visible_subfolders(self, tmp_path):
+        (tmp_path / "alpha").mkdir()
+        (tmp_path / "Beta").mkdir()
+        (tmp_path / ".hidden").mkdir()
+        (tmp_path / "note.txt").write_text("not a folder")
+        resp = client.get("/api/browse", params={"path": str(tmp_path)})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert [e["name"] for e in body["entries"]] == ["alpha", "Beta"]
+        assert body["path"] == str(tmp_path.resolve())
+        assert body["parent"] == str(tmp_path.resolve().parent)
+
+    def test_defaults_to_home(self):
+        resp = client.get("/api/browse")
+        assert resp.status_code == 200
+        assert resp.json()["path"] == resp.json()["home"]
+
+    def test_rejects_a_file_and_a_missing_path(self, tmp_path):
+        f = tmp_path / "x.txt"
+        f.write_text("hi")
+        assert client.get("/api/browse", params={"path": str(f)}).status_code == 400
+        assert client.get("/api/browse", params={"path": str(tmp_path / "nope")}).status_code == 400
+
+
 class TestQueryEndpoint:
     def test_fast_route_query(self):
         resp = client.post(

@@ -23,12 +23,12 @@ from pathlib import Path
 from sqlmodel import select
 
 from app.config import IMAGE_CLIP_MODEL_NAME as MODEL_NAME
-from app.db import get_session
+from app.db import DATA_DIR, get_session
 from app.models import FileRecord
 from app.retrieval.base import ScoredFile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CHROMA_DIR = REPO_ROOT / "data" / "chroma"
+CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "images_clip"
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
@@ -62,7 +62,7 @@ def resolve_image_path(record: FileRecord) -> Path | None:
     path; synthetic files store a path relative to data/files_corpus/. Either way,
     this is how we find the actual pixels to embed."""
     p = Path(record.path)
-    candidate = p if p.is_absolute() else REPO_ROOT / "data" / "files_corpus" / record.path
+    candidate = p if p.is_absolute() else DATA_DIR / "files_corpus" / record.path
     return candidate if candidate.exists() else None
 
 

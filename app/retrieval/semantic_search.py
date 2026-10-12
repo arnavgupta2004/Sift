@@ -18,12 +18,12 @@ from pathlib import Path
 
 from sqlmodel import select
 
-from app.db import get_session
+from app.db import DATA_DIR, get_session
 from app.models import FileRecord
 from app.retrieval.base import ScoredFile
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CHROMA_DIR = REPO_ROOT / "data" / "chroma"
+CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "files"
 MODEL_NAME = os.environ.get("SEMANTIC_MODEL", "all-MiniLM-L6-v2")
 MAX_CHARS = 2000  # per-file text truncation before embedding; corpus docs are short

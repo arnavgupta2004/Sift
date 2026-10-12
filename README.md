@@ -142,6 +142,11 @@ uvicorn app.api:app --reload              # API (POST /api/query, GET /api/query
 cd ui/frontend && npm install && npm run dev   # production React/TS UI (proxies to the API above)
 ```
 
+> **Keeping tests separate from a real-folder index.** Indexing a real folder in the UI replaces the demo
+> corpus in `data/`, and the tests need that demo corpus. To run the tests without touching your own
+> index, point both steps at a separate directory: `SIFT_DATA_DIR=data_test python data/generate_synthetic_data.py`
+> then `SIFT_DATA_DIR=data_test pytest` (the folder is git-ignored; the default is `data/`).
+
 ### Docker
 
 ```bash

@@ -82,3 +82,10 @@ export type SSEEvent =
   | { type: 'route'; tier: string; rationale: string }
   | { type: 'stage'; name: string; duration_ms: number; skipped: boolean; detail: string }
   | { type: 'done'; results: ResultItem[]; routing_trace: RoutingTraceData }
+
+export interface BrowseResult {
+  path: string
+  parent: string | null
+  home: string
+  entries: { name: string; path: string }[]
+}

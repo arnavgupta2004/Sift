@@ -87,6 +87,39 @@ def ingest(req: IngestRequest):
     }
 
 
+@app.get("/api/browse")
+def browse(path: str | None = None):
+    """Lists the subfolders of a directory on the machine running the backend, so the
+    UI can offer a folder picker (a browser can't hand a web page a real folder path)."""
+    target = Path(path).expanduser() if path else Path.home()
+    try:
+        target = target.resolve()
+        if not target.is_dir():
+            raise HTTPException(status_code=400, detail=f"not a folder: {target}")
+        children = sorted(target.iterdir(), key=lambda p: p.name.lower())
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"no permission to read: {target}")
+    except OSError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    entries = []
+    for child in children:
+        if child.name.startswith("."):
+            continue
+        try:
+            if child.is_dir():
+                entries.append({"name": child.name, "path": str(child)})
+        except OSError:
+            continue
+
+    return {
+        "path": str(target),
+        "parent": str(target.parent) if target.parent != target else None,
+        "home": str(Path.home()),
+        "entries": entries,
+    }
+
+
 @app.post("/api/query")
 def query(req: QueryRequest):
     return run_query(req.query, req.user_id)

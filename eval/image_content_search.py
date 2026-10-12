@@ -37,13 +37,13 @@ sys.path.insert(0, str(REPO_ROOT))
 from sqlmodel import select  # noqa: E402
 
 from app.agent.graph import run_query  # noqa: E402
-from app.db import get_session  # noqa: E402
+from app.db import DATA_DIR, get_session  # noqa: E402
 from app.models import FileRecord, UserRecord  # noqa: E402
 from app.retrieval import image_search  # noqa: E402
 from eval.metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k  # noqa: E402
 from eval.run_benchmark import RESULTS_DIR  # noqa: E402
 
-SUBJECTS_PATH = REPO_ROOT / "data" / "image_subjects.json"
+SUBJECTS_PATH = DATA_DIR / "image_subjects.json"
 MIN_SUPPORT = 2  # only build a query for a shape+color combo with >= this many images
 MAX_QUERIES = 6
 K_PRECISION = 5

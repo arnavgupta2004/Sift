@@ -34,6 +34,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
+from app.db import DATA_DIR  # noqa: E402
 from app.models import FileRecord, UserRecord  # noqa: E402
 from data.synth import content, corpus_writer  # noqa: E402
 from data.synth.access_log import simulate_access_log  # noqa: E402
@@ -194,8 +195,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num-files", type=int, default=350)
     parser.add_argument("--weeks", type=int, default=10, help="weeks of access log history to simulate")
-    parser.add_argument("--corpus-dir", type=Path, default=REPO_ROOT / "data" / "files_corpus")
-    parser.add_argument("--db-path", type=Path, default=REPO_ROOT / "data" / "db.sqlite")
+    parser.add_argument("--corpus-dir", type=Path, default=DATA_DIR / "files_corpus")
+    parser.add_argument("--db-path", type=Path, default=DATA_DIR / "db.sqlite")
     parser.add_argument(
         "--use-llm-content", action="store_true",
         help=(
@@ -230,7 +231,7 @@ def main() -> None:
     print(f"[generate_synthetic_data] generating {args.num_files} files across {len(TOPICS)} topics (seed={args.seed})...")
     file_records, image_subjects = build_file_plan(args.num_files, args.seed, args.corpus_dir, now, use_llm)
 
-    image_subjects_path = REPO_ROOT / "data" / "image_subjects.json"
+    image_subjects_path = DATA_DIR / "image_subjects.json"
     image_subjects_path.write_text(json.dumps(image_subjects, indent=2))
 
     engine = create_engine(f"sqlite:///{args.db_path}")
