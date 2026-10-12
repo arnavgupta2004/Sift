@@ -31,6 +31,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CHROMA_DIR = REPO_ROOT / "data" / "chroma"
 COLLECTION_NAME = "images_clip"
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
+CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
 
 
 @lru_cache(maxsize=1)
@@ -82,8 +83,8 @@ def build_index(force: bool = False) -> int:
 
     if force and collection.count() > 0:
         existing_ids = collection.get()["ids"]
-        if existing_ids:
-            collection.delete(ids=existing_ids)
+        for i in range(0, len(existing_ids), CHROMA_BATCH):
+            collection.delete(ids=existing_ids[i : i + CHROMA_BATCH])
 
     from PIL import Image
 
@@ -105,8 +106,12 @@ def build_index(force: bool = False) -> int:
         embeddings.append(vec.tolist())
         docs.append(r.filename)
 
-    if ids:
-        collection.upsert(ids=ids, embeddings=embeddings, documents=docs)
+    for i in range(0, len(ids), CHROMA_BATCH):
+        collection.upsert(
+            ids=ids[i : i + CHROMA_BATCH],
+            embeddings=embeddings[i : i + CHROMA_BATCH],
+            documents=docs[i : i + CHROMA_BATCH],
+        )
     return len(ids)
 
 

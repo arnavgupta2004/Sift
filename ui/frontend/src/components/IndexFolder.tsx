@@ -11,7 +11,7 @@ interface Props {
 export function IndexFolder({ onIndexed }: Props) {
   const [open, setOpen] = useState(false)
   const [root, setRoot] = useState('')
-  const [maxFiles, setMaxFiles] = useState(300)
+  const [maxFiles, setMaxFiles] = useState<number | null>(null)
   const [clearExisting, setClearExisting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<IngestResult | null>(null)
@@ -71,10 +71,11 @@ export function IndexFolder({ onIndexed }: Props) {
               className="index-folder-maxfiles"
               type="number"
               min={1}
-              max={5000}
-              value={maxFiles}
-              onChange={(e) => setMaxFiles(Number(e.target.value))}
-              aria-label="Maximum number of files to add"
+              value={maxFiles ?? ''}
+              placeholder="All files"
+              onChange={(e) => setMaxFiles(e.target.value === '' ? null : Number(e.target.value))}
+              aria-label="Optional: maximum number of files to add (leave empty for the whole folder)"
+              title="Optional limit — leave empty to index the whole folder"
             />
           </div>
 

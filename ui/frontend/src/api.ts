@@ -13,7 +13,7 @@ export async function listUsers(): Promise<UserSummary[]> {
 
 export async function ingestFolder(
   root: string,
-  maxFiles: number,
+  maxFiles: number | null,
   clearExisting: boolean,
 ): Promise<IngestResult> {
   const res = await fetch('/api/ingest', {

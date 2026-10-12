@@ -50,7 +50,7 @@ def list_users():
 
 class IngestRequest(BaseModel):
     root: str
-    max_files: int = 300
+    max_files: int | None = None  # None = index the whole folder
     clear_existing: bool = False
 
 

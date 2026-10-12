@@ -127,7 +127,7 @@ comparison (`eval/local_vs_cloud.py`) and the image-content-search benchmark
   `brew services start ollama` (or `ollama serve`) and confirm `ollama list` shows
   `qwen2.5:1.5b`. This is a documented fallback, not a bug.
 - **Folder indexing takes a while on a large folder**: it's doing real work (crawling
-  + text extraction + re-embedding the whole corpus). Cap `max_files` lower (the UI
-  defaults to 300) for a snappier live demo.
+  + text extraction + re-embedding the whole corpus). The UI indexes the whole folder
+  by default; set the optional file-limit box (e.g. 300) for a snappier live demo.
 - **Baseline comparison panel says "not available yet"**: `eval/results/` wasn't
   generated — run `python eval/baseline_comparison.py` once beforehand.

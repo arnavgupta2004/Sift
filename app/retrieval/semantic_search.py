@@ -27,6 +27,7 @@ CHROMA_DIR = REPO_ROOT / "data" / "chroma"
 COLLECTION_NAME = "files"
 MODEL_NAME = os.environ.get("SEMANTIC_MODEL", "all-MiniLM-L6-v2")
 MAX_CHARS = 2000  # per-file text truncation before embedding; corpus docs are short
+CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
 
 
 @lru_cache(maxsize=1)
@@ -64,15 +65,20 @@ def build_index(force: bool = False) -> int:
 
     if force and collection.count() > 0:
         existing_ids = collection.get()["ids"]
-        if existing_ids:
-            collection.delete(ids=existing_ids)
+        for i in range(0, len(existing_ids), CHROMA_BATCH):
+            collection.delete(ids=existing_ids[i : i + CHROMA_BATCH])
 
     embedder = _get_embedder()
     ids = [str(f.id) for f in files]
     docs = [f"{f.filename}\n{f.extracted_text[:MAX_CHARS]}" for f in files]
-    embeddings = embedder.encode(docs, show_progress_bar=False, normalize_embeddings=True)
+    embeddings = embedder.encode(docs, show_progress_bar=False, normalize_embeddings=True).tolist()
 
-    collection.upsert(ids=ids, embeddings=embeddings.tolist(), documents=docs)
+    for i in range(0, len(ids), CHROMA_BATCH):
+        collection.upsert(
+            ids=ids[i : i + CHROMA_BATCH],
+            embeddings=embeddings[i : i + CHROMA_BATCH],
+            documents=docs[i : i + CHROMA_BATCH],
+        )
     return len(files)
 
 
