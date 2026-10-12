@@ -1,5 +1,8 @@
 """Shared SQLModel schema for the metadata store.
 
+Datetime columns are declared with an explicit sa_type=DateTime: this app stores naive local
+times, and newer sqlmodel releases (0.0.48+) otherwise reject any datetime without a timezone.
+
 Used both by the synthetic data generator (data/generate_synthetic_data.py) and the
 runtime retrieval/personalization code (app/retrieval/metadata_search.py,
 app/personalization/*), so there is exactly one definition of the schema.
@@ -9,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel
 
 
@@ -20,8 +24,8 @@ class FileRecord(SQLModel, table=True):
     path: str
     file_type: str = Field(index=True)
     size_bytes: int
-    created_at: datetime
-    modified_at: datetime
+    created_at: datetime = Field(sa_type=DateTime)
+    modified_at: datetime = Field(sa_type=DateTime)
     topic_cluster: str = Field(index=True)
     extracted_text: str = ""
 
@@ -41,7 +45,7 @@ class AccessEvent(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id", index=True)
     file_id: int = Field(foreign_key="files.id", index=True)
     action: str  # "open" | "edit" | "search"
-    timestamp: datetime = Field(index=True)
+    timestamp: datetime = Field(index=True, sa_type=DateTime)
     session_id: str = Field(index=True)
 
 
@@ -56,4 +60,4 @@ class FeedbackEvent(SQLModel, table=True):
     file_id: int = Field(foreign_key="files.id", index=True)
     query: str
     signal: str  # "thumbs_up" | "thumbs_down" | "opened"
-    timestamp: datetime = Field(index=True)
+    timestamp: datetime = Field(index=True, sa_type=DateTime)
