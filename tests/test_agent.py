@@ -111,11 +111,11 @@ class TestGraphEndToEnd:
         assert {"hybrid_fusion", "reranker", "personalization"} <= ran
         assert trace["llm_call_count"] == 0  # still no LLM on the standard tier
 
-    def test_live_mode_skips_image_search_for_a_textual_query(self, monkeypatch):
+    def test_live_mode_keeps_images_out_of_file_results(self, monkeypatch):
         monkeypatch.setattr(runtime, "LIVE", True)
         out = run_query("find my recent notes about transformers", _first_user_id())
         skipped = {s["name"]: s["detail"] for s in out["routing_trace"]["stages"] if s["skipped"]}
-        assert "image_search" in skipped and "look" in skipped["image_search"]
+        assert "Images view" in skipped["image_search"]
 
     def test_deep_route_runs_full_pipeline(self):
         out = run_query(

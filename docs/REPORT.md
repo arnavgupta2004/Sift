@@ -735,7 +735,7 @@ never turn it on, so the reported results stay reproducible.
 |---|---|---|---|
 | Keyword search | in-memory BM25 over all files | SQLite FTS5 (BM25), kept current by the indexer | scales to hundreds of thousands of files without rebuilding |
 | Standard tier | fusion, no reranker | fusion, then cross-encoder rerank (still no LLM call) | on real files a mid-list-everywhere file outranked the best keyword match |
-| Image search | every non-fast query | only when the query is about how something looks | CLIP scores a document query and an unrelated photo alike; photos leaked into text results |
+| Image search | every non-fast query | its own Images view (`/api/images`); not mixed into file results | CLIP scores a document query and an unrelated photo alike (measured: top-1 similarity and z-score overlap between the two kinds of query), so no threshold or keyword rule can tell them apart reliably; photos leaked into text results |
 | Personalization weight | alpha 0.6 | alpha 0.85 | one real user's recent files must not outrank the file that matches the query |
 | Vector indexes | rebuilt when the file count changes | grown incrementally, never rebuilt by a search | a rebuild would re-embed the whole machine |
 

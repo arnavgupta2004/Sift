@@ -4,6 +4,7 @@ import type {
   PersonalizationInsights,
   SSEEvent,
   UserSummary,
+  ImageHit,
 } from './types'
 
 export async function getMe(): Promise<UserSummary> {
@@ -82,4 +83,10 @@ export async function openFile(fileId: number, userId: number): Promise<void> {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(body.detail ?? 'Could not open the file')
   }
+}
+
+export async function searchImages(query: string): Promise<ImageHit[]> {
+  const res = await fetch(`/api/images?${new URLSearchParams({ query, limit: '36' })}`)
+  if (!res.ok) throw new Error('Image search failed')
+  return (await res.json()).results
 }

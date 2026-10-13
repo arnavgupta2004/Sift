@@ -148,3 +148,20 @@ class TestRoots:
     def test_env_override(self, monkeypatch, tmp_path):
         monkeypatch.setenv("SIFT_INDEX_ROOTS", f"{tmp_path}{os.pathsep}{tmp_path / 'b'}")
         assert indexer.default_roots() == [tmp_path, tmp_path / "b"]
+
+
+class TestImagesAddedLater:
+    def test_webp_files_marked_done_before_images_were_read_are_queued_once(self, env):
+        db, root, status, stop = env
+        _write(root, "pic.webp", "not really an image")
+        _write(root, "kept.png", "x")
+        indexer.sweep([root], status, stop, db)
+        with get_engine(db).begin() as conn:
+            conn.exec_driver_sql("UPDATE index_state SET stage=1")  # as an older indexer left them
+        webp, _ = _by_name(db, "pic.webp")
+        png, _ = _by_name(db, "kept.png")
+        engine = get_engine(db)
+        assert indexer.requeue_unembedded_images(engine, embedded_ids={png.id}) == 1
+        assert _by_name(db, "pic.webp")[1].stage == 0
+        assert _by_name(db, "kept.png")[1].stage == 1  # old formats are never retried
+        assert indexer.requeue_unembedded_images(engine, embedded_ids={webp.id}) == 0

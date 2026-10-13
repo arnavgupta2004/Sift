@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { getMe, getPersonalization } from './api'
+import { getMe, getPersonalization, searchImages } from './api'
 import { streamQuery } from './api'
+import { ImageResults } from './components/ImageResults'
 import { IndexStatus } from './components/IndexStatus'
 import { PersonalizationPanel } from './components/PersonalizationPanel'
 import { ResultsList } from './components/ResultsList'
 import { TracePanel } from './components/TracePanel'
-import type { PersonalizationInsights, ResultItem, RoutingTraceData, StageTrace, UserSummary } from './types'
+import type { ImageHit, PersonalizationInsights, ResultItem, RoutingTraceData, StageTrace, UserSummary } from './types'
 
 const EXAMPLE_QUERIES = [
   'Find my latest presentation',
@@ -14,7 +15,14 @@ const EXAMPLE_QUERIES = [
   'Find the notes about my project from last week',
 ]
 
+type Mode = 'files' | 'images'
+
+const EXAMPLE_IMAGE_QUERIES = ['a person smiling', 'a screenshot of code', 'a whiteboard with equations']
+
 function App() {
+  const [mode, setMode] = useState<Mode>('files')
+  const [imageHits, setImageHits] = useState<ImageHit[]>([])
+  const [imagesSearched, setImagesSearched] = useState(false)
   const [me, setMe] = useState<UserSummary | null>(null)
   const [query, setQuery] = useState('')
 
@@ -47,7 +55,22 @@ function App() {
       .finally(() => setInsightsLoading(false))
   }, [me, results])
 
+  function runImageQuery() {
+    if (!query.trim()) return
+    setIsStreaming(true)
+    setApiError(null)
+    setLastQuery(query)
+    searchImages(query)
+      .then((hits) => {
+        setImageHits(hits)
+        setImagesSearched(true)
+      })
+      .catch(() => setApiError('Image search failed — check that the Sift service is running.'))
+      .finally(() => setIsStreaming(false))
+  }
+
   function runQuery() {
+    if (mode === 'images') return runImageQuery()
     if (me === null || !query.trim()) return
     cancelRef.current?.()
 
@@ -102,6 +125,13 @@ function App() {
           <h2>What are you looking for?</h2>
           <p>Use everyday words. Try a name, topic, file type, or when you last used it.</p>
         </div>
+        <div className="mode-switch" role="tablist" aria-label="What to search">
+          {(['files', 'images'] as const).map((m) => (
+            <button key={m} role="tab" aria-selected={mode === m} className={mode === m ? 'active' : ''} onClick={() => setMode(m)}>
+              {m === 'files' ? 'Files' : 'Images'}
+            </button>
+          ))}
+        </div>
         <div className="query-bar">
           <span className="search-icon" aria-hidden="true">⌕</span>
           <input
@@ -109,16 +139,16 @@ function App() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && runQuery()}
-            placeholder="e.g. the budget spreadsheet I opened last month"
+            placeholder={mode === 'files' ? 'e.g. the budget spreadsheet I opened last month' : 'Describe the picture, e.g. a dog on a couch'}
             aria-label="Describe the file you want to find"
           />
-          <button className="run-button" onClick={runQuery} disabled={isStreaming || !query.trim() || me === null}>
-            {isStreaming ? 'Finding files…' : 'Find files'}
+          <button className="run-button" onClick={runQuery} disabled={isStreaming || !query.trim() || (mode === 'files' && me === null)}>
+            {isStreaming ? 'Searching…' : mode === 'files' ? 'Find files' : 'Find images'}
           </button>
         </div>
         <div className="example-area">
           <span>Try:</span>
-          {EXAMPLE_QUERIES.map((q) => (
+          {(mode === 'files' ? EXAMPLE_QUERIES : EXAMPLE_IMAGE_QUERIES).map((q) => (
             <button key={q} className="example-chip" onClick={() => setQuery(q)}>
               {q}
             </button>
@@ -132,6 +162,18 @@ function App() {
 
       <div className="main-grid">
         <main className="main-column">
+          {mode === 'images' ? (
+            <section className="results-panel panel" aria-live="polite">
+              <div className="results-heading">
+                <div>
+                  <h2>{isStreaming ? 'Looking through your pictures…' : imageHits.length ? 'Matching images' : 'Describe a picture'}</h2>
+                  <p>{lastQuery && imagesSearched && !isStreaming ? `Images matching “${lastQuery}”` : 'Sift compares your words to what is in each image, not its file name.'}</p>
+                </div>
+                {imageHits.length > 0 && <span className="results-count">{imageHits.length} found</span>}
+              </div>
+              <ImageResults hits={imageHits} userId={me?.id ?? 0} searched={imagesSearched} />
+            </section>
+          ) : (
           <section className="results-panel panel" aria-live="polite">
             <div className="results-heading">
               <div>
@@ -142,8 +184,9 @@ function App() {
             </div>
             <ResultsList results={results} userId={me?.id ?? 0} query={lastQuery} />
           </section>
+          )}
 
-          {(tier || finalTrace) && (
+          {mode === 'files' && (tier || finalTrace) && (
             <details className="advanced-details">
               <summary>How Sift found these files</summary>
               <p>This is the technical search path used for this request.</p>

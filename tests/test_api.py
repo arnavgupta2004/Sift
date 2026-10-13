@@ -38,6 +38,89 @@ class TestSingleUserEndpoints:
         assert client.get("/api/browse").status_code == 404
 
 
+class TestImageEndpoints:
+    def _add_png(self, tmp_path, name="photo.png", size=(900, 600)):
+        from datetime import datetime
+
+        from PIL import Image
+
+        from app.db import get_session
+        from app.models import FileRecord
+
+        path = tmp_path / name
+        Image.new("RGB", size, (200, 40, 40)).save(path)
+        with get_session() as s:
+            rec = FileRecord(filename=name, path=str(path), file_type="png", size_bytes=1,
+                             created_at=datetime(2026, 1, 1), modified_at=datetime(2026, 1, 1),
+                             topic_cluster="uncategorized")
+            s.add(rec)
+            s.commit()
+            s.refresh(rec)
+            return rec.id
+
+    def _remove(self, file_id):
+        from app.db import DATA_DIR, get_session
+        from app.models import FileRecord
+
+        with get_session() as s:
+            rec = s.get(FileRecord, file_id)
+            if rec:
+                s.delete(rec)
+                s.commit()
+        (DATA_DIR / "thumbs" / f"{file_id}.jpg").unlink(missing_ok=True)
+
+    def test_thumbnail_is_a_small_jpeg_of_the_image(self, tmp_path):
+        import io
+
+        from PIL import Image
+
+        fid = self._add_png(tmp_path)
+        try:
+            resp = client.get(f"/api/thumbnail/{fid}")
+            assert resp.status_code == 200
+            assert resp.headers["content-type"] == "image/jpeg"
+            assert max(Image.open(io.BytesIO(resp.content)).size) <= 320
+        finally:
+            self._remove(fid)
+
+    def test_thumbnail_refuses_non_images_and_unknown_ids(self):
+        assert client.get("/api/thumbnail/99999999").status_code == 404
+        from sqlmodel import select
+
+        from app.db import get_session
+        from app.models import FileRecord
+
+        with get_session() as s:
+            not_image = s.exec(select(FileRecord).where(FileRecord.file_type == "md")).first()
+        assert client.get(f"/api/thumbnail/{not_image.id}").status_code == 404
+
+    def test_image_search_returns_described_matches(self, tmp_path, monkeypatch):
+        from app.retrieval.base import ScoredFile
+
+        fid = self._add_png(tmp_path, "red_square.png")
+        monkeypatch.setattr(
+            "app.api.image_search.search",
+            lambda q, limit=10: [ScoredFile(file_id=fid, score=0.31, source="image_semantic", explanation="x")],
+        )
+        try:
+            body = client.get("/api/images", params={"query": "a red square"}).json()
+            assert [r["filename"] for r in body["results"]] == ["red_square.png"]
+            assert body["results"][0]["score"] == 0.31
+        finally:
+            self._remove(fid)
+
+
+class TestOnlyLocalPagesMayCallTheApi:
+    def test_a_foreign_website_gets_no_cors_permission(self):
+        resp = client.get("/api/users", headers={"Origin": "https://evil.example"})
+        assert "access-control-allow-origin" not in resp.headers
+
+    def test_the_local_ui_does(self):
+        for origin in ("http://localhost:5173", "http://127.0.0.1:5173"):
+            resp = client.get("/api/users", headers={"Origin": origin})
+            assert resp.headers.get("access-control-allow-origin") == origin
+
+
 class TestOpenEndpoint:
     def _add(self, tmp_path, name, ext):
         from app.db import get_session

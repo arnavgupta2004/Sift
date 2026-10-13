@@ -52,7 +52,7 @@ _TEXT_EXTRA = {
 }
 _OFFICE_TYPES = {"pdf", "docx", "xlsx", "pptx"}
 EXTRACTABLE = TEXT_NATIVE_EXTENSIONS | _TEXT_EXTRA | _OFFICE_TYPES
-IMAGE_TYPES = {"png", "jpg", "jpeg"}
+from app.retrieval.image_search import IMAGE_EXTENSIONS as IMAGE_TYPES  # noqa: E402
 _DOCUMENT_TYPES = {"pdf", "docx", "pptx", "xlsx", "md", "txt", "rtf"}
 MAX_READ_BYTES = 50 * 1024 * 1024  # don't open anything bigger to extract text from it
 _DATALESS_FLAG = 0x40000000  # macOS: file contents live in the cloud, not on disk
@@ -209,6 +209,25 @@ def backfill_state(engine, embedded_ids: set[int]) -> None:
             stage, prio = (1, 0) if fid in embedded_ids else _priority(ftype, modified, now)
             s.add(IndexState(file_id=fid, stage=stage, priority=prio))
         s.commit()
+
+
+# Image formats added after the first indexer shipped: files of these types that were marked
+# "done" back when nothing read them were never embedded, so they must be queued once.
+_LATE_IMAGE_TYPES = {"webp", "gif", "bmp", "tif", "tiff"}
+
+
+def requeue_unembedded_images(engine, embedded_ids: set[int]) -> int:
+    with Session(engine) as s:
+        rows = s.exec(
+            select(IndexState)
+            .join(FileRecord, FileRecord.id == IndexState.file_id)
+            .where(IndexState.stage == 1, FileRecord.file_type.in_(_LATE_IMAGE_TYPES))
+        ).all()
+        todo = [st for st in rows if st.file_id not in embedded_ids]
+        for st in todo:
+            st.stage = 0
+        s.commit()
+        return len(todo)
 
 
 # --- pass 1: sweep ----------------------------------------------------------------
@@ -544,6 +563,8 @@ class Indexer:
                 for get_collection in (semantic_search._get_collection, image_search._get_collection):
                     embedded |= {int(i) for i in get_collection().get()["ids"]}
             backfill_state(engine, embedded)
+            if self.embed:
+                requeue_unembedded_images(engine, embedded)
             owner = ensure_owner(self.db_path)
         except Exception as e:
             self.status.last_error = f"startup failed: {e}"

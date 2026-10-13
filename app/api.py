@@ -20,13 +20,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import select
 
 from app import indexer
 from app.agent.graph import GraphState, get_compiled_graph, run_query
 from app.db import DATA_DIR, get_session
+from app.retrieval import image_search
 from app.models import AccessEvent, FileRecord, UserRecord
 from app.personalization.feedback import record_feedback
 from app.personalization.profile_builder import build_user_profile
@@ -46,9 +47,15 @@ async def lifespan(_app: FastAPI):
     indexer.stop()
 
 
+# This API can search, list and open every file on the machine, so only pages served from
+# this machine may talk to it. (Allowing every origin would let any website you visit read
+# your file index.)
+_LOCAL_ORIGIN_PATTERN = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
 app = FastAPI(title="Agentic File Recommendation and Retrieval API", lifespan=lifespan)
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware, allow_origins=[], allow_origin_regex=_LOCAL_ORIGIN_PATTERN,
+    allow_methods=["*"], allow_headers=["*"],
 )
 
 
@@ -66,7 +73,7 @@ def list_users():
 
 # Never launched from the UI, even if indexed: opening these would run code, not show a document.
 _NEVER_OPEN = {"exe", "bat", "cmd", "com", "msi", "dll", "sh", "command", "app", "jar", "scr", "ps1", "vbs", "lnk", "pkg", "dmg"}
-_LOCAL_ORIGIN = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
+_LOCAL_ORIGIN = re.compile(_LOCAL_ORIGIN_PATTERN)
 
 
 @app.get("/api/me")
@@ -129,6 +136,36 @@ def open_file(req: OpenRequest, request: Request):
             ))
             session.commit()
     return {"opened": str(path)}
+
+
+@app.get("/api/images")
+def search_images(query: str, limit: int = 24):
+    """Describe a picture, get matching images (CLIP compares the words to what is in the
+    image, not to its filename)."""
+    hits = image_search.search(query, limit=max(1, min(limit, 60)))
+    ids = [h.file_id for h in hits]
+    with get_session() as session:
+        records = {r.id: r for r in session.exec(select(FileRecord).where(FileRecord.id.in_(ids)))} if ids else {}
+    return {
+        "query": query,
+        "results": [
+            {"file_id": h.file_id, "filename": records[h.file_id].filename, "path": records[h.file_id].path,
+             "score": round(h.score, 4)}
+            for h in hits if h.file_id in records
+        ],
+    }
+
+
+@app.get("/api/thumbnail/{file_id}")
+def get_thumbnail(file_id: int):
+    with get_session() as session:
+        record = session.get(FileRecord, file_id)
+    if record is None or record.file_type.lower() not in image_search.IMAGE_EXTENSIONS:
+        raise HTTPException(status_code=404, detail="no such image")
+    thumb = image_search.thumbnail(record)
+    if thumb is None:
+        raise HTTPException(status_code=404, detail="image missing or unreadable")
+    return FileResponse(thumb, media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
 
 
 @app.post("/api/query")

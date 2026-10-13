@@ -125,8 +125,11 @@ def node_fast_retrieve(state: GraphState) -> dict:
 
 
 def _image_results(trace: RoutingTrace, intent: QueryIntent) -> list[ScoredFile]:
-    if runtime.LIVE and not image_search.wants_images(intent):
-        trace.skip("image_search", "query is not about how something looks")
+    if runtime.LIVE:
+        # CLIP scores cannot tell a picture description from a document query, so on a real
+        # laptop mixing photos into document results puts random pictures in them. Images
+        # have their own search (/api/images, the UI's Images view) instead.
+        trace.skip("image_search", "images are searched in the Images view")
         return []
     with trace.stage("image_search", detail="CLIP content match over indexed images"):
         return image_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)

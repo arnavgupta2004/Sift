@@ -31,6 +31,8 @@ commands in that file.
   them — zero filename/keyword overlap with the query — at NDCG@10 0.83 in isolation. Found (and
   partially fixed) a real bug doing this: the cross-encoder reranker was discarding CLIP's correct
   matches because it only ever sees caption text, never pixels.
+  In the app, the **Images** tab searches pictures by description ("a dog on a couch") and shows
+  thumbnails; image results are kept out of ordinary file searches.
 - **Runs fully on-device by default** (Ollama, `qwen2.5:1.5b`, picked via a 3-model benchmark) — no API
   key, nothing leaves the machine. The local model trails a cloud model on both routing accuracy and
   retrieval-quality-relevant reasoning, reported honestly rather than hidden — see `docs/REPORT.md` §5.6.

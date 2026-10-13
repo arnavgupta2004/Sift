@@ -31,7 +31,7 @@ from app.retrieval.base import ScoredFile
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "images_clip"
-IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
+IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"}
 CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
 
 
@@ -58,22 +58,6 @@ def _get_collection():
     return client.get_or_create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
 
 
-_VISUAL_WORDS = {
-    "photo", "photos", "picture", "pictures", "pic", "pics", "image", "images", "screenshot",
-    "screenshots", "diagram", "diagrams", "drawing", "sketch", "logo", "scan", "scanned",
-    "selfie", "wallpaper", "poster", "figure", "chart", "illustration", "meme",
-}
-
-
-def wants_images(intent) -> bool:
-    """Whether a query is about how something looks. CLIP gives similar similarity scores
-    to a genuine visual match and to an unrelated photo, so on a real laptop (thousands
-    of photos and screenshots) searching images for every query puts random pictures into
-    the results of purely textual queries. Gate on the query instead."""
-    words = {w.strip(".,!?\"'()").lower() for w in intent.raw_query.split()}
-    return bool(words & _VISUAL_WORDS) or bool(set(intent.filters.file_types or []) & IMAGE_EXTENSIONS)
-
-
 def resolve_image_path(record: FileRecord) -> Path | None:
     """Real files ingested via FilesystemDataSource store an absolute, self-locating
     path; synthetic files store a path relative to data/files_corpus/. Either way,
@@ -81,6 +65,30 @@ def resolve_image_path(record: FileRecord) -> Path | None:
     p = Path(record.path)
     candidate = p if p.is_absolute() else DATA_DIR / "files_corpus" / record.path
     return candidate if candidate.exists() else None
+
+
+THUMB_SIZE = 320
+
+
+def thumbnail(record: FileRecord, size: int = THUMB_SIZE) -> Path | None:
+    """A small JPEG preview of an image file, cached under DATA_DIR/thumbs and rebuilt if
+    the original changes. Returns None if the file is missing or can't be decoded."""
+    src = resolve_image_path(record)
+    if src is None or record.id is None:
+        return None
+    out = DATA_DIR / "thumbs" / f"{record.id}.jpg"
+    try:
+        if out.exists() and out.stat().st_mtime >= src.stat().st_mtime:
+            return out
+        from PIL import Image
+
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with Image.open(src) as img:
+            img.thumbnail((size, size))
+            img.convert("RGB").save(out, "JPEG", quality=80)
+        return out
+    except Exception:
+        return None
 
 
 def add_images(records: list[FileRecord]) -> int:

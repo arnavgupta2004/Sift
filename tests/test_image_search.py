@@ -69,19 +69,3 @@ class TestImageSearchIndexAndQuery:
         # distinct drawn subjects, the top-5 sets should not be identical
         assert circles != squares
 
-
-class TestWantsImages:
-    def _wants(self, query):
-        from app.agent.query_understanding import extract_entities
-        from app.retrieval.image_search import wants_images
-
-        return wants_images(extract_entities(query))
-
-    def test_visual_queries_search_images(self):
-        assert self._wants("photo of a beach")
-        assert self._wants("my screenshots from last week")
-        assert self._wants("a diagram of the pipeline")
-
-    def test_document_queries_do_not(self):
-        assert not self._wants("game theory lecture notes")
-        assert not self._wants("my resume or CV")

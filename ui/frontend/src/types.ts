@@ -87,3 +87,10 @@ export interface IndexStatus {
   last_sweep_finished: string | null
   last_error: string | null
 }
+
+export interface ImageHit {
+  file_id: number
+  filename: string
+  path: string
+  score: number
+}
