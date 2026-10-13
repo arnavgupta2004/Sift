@@ -93,6 +93,7 @@ def index_status():
 class OpenRequest(BaseModel):
     file_id: int
     user_id: int | None = None
+    query: str | None = None  # set when opened from search results
 
 
 def _launch(path: Path) -> None:
@@ -135,6 +136,10 @@ def open_file(req: OpenRequest, request: Request):
                 timestamp=datetime.now(), session_id="ui",
             ))
             session.commit()
+        if req.query:
+            # Opening a result is the strongest implicit "this was the one" signal; it
+            # trains the learned ranker (app/personalization/retrain.py) like a thumbs-up.
+            record_feedback(req.user_id, record.id, req.query, "opened")
     return {"opened": str(path)}
 
 
@@ -250,10 +255,18 @@ def personalization_insights(user_id: int):
     active_boost = current_context_boost(user_id, now=now)
 
     top_files = sorted(profile.file_frequency.items(), key=lambda x: x[1], reverse=True)[:5]
-    all_file_ids = {fid for fid, _ in top_files} | {fid for p in patterns for fid in p.file_ids}
+    recent = sorted(profile.file_recency.items(), key=lambda x: x[1], reverse=True)[:8]
+    all_file_ids = (
+        {fid for fid, _ in top_files} | {fid for fid, _ in recent}
+        | {fid for p in patterns for fid in p.file_ids}
+    )
     with get_session() as session:
         records = session.exec(select(FileRecord).where(FileRecord.id.in_(all_file_ids))).all()
     name_by_id = {r.id: r.filename for r in records}
+    record_by_id = {r.id: r for r in records}
+    suggested = {fid: "usual_now" for fid in active_boost}
+    for fid, _ in recent:
+        suggested.setdefault(fid, "recent")
 
     return {
         "preferred_file_types": profile.preferred_file_types[:5],
@@ -261,6 +274,14 @@ def personalization_insights(user_id: int):
             {"file_id": fid, "filename": name_by_id.get(fid, "?"), "frequency": round(freq, 3)}
             for fid, freq in top_files
         ],
+        # What the empty search box suggests, Spotlight-style: files this user is
+        # expected to want now (a recurring pattern for this hour first), then recent ones.
+        "suggested_files": [
+            {"file_id": fid, "filename": record_by_id[fid].filename, "path": record_by_id[fid].path,
+             "file_type": record_by_id[fid].file_type, "reason": reason}
+            for fid, reason in suggested.items()
+            if fid in record_by_id
+        ][:8],
         "recurring_patterns": [
             {
                 "weekday": p.weekday_name,
