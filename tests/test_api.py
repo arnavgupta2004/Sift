@@ -45,6 +45,58 @@ class TestBrowseEndpoint:
         assert client.get("/api/browse", params={"path": str(tmp_path / "nope")}).status_code == 400
 
 
+class TestOpenEndpoint:
+    def _add(self, tmp_path, name, ext):
+        from app.db import get_session
+        from app.models import FileRecord
+        from datetime import datetime
+        f = tmp_path / name
+        f.write_text("hello")
+        with get_session() as s:
+            rec = FileRecord(filename=name, path=str(f), file_type=ext, size_bytes=5,
+                             created_at=datetime(2026, 1, 1), modified_at=datetime(2026, 1, 1),
+                             topic_cluster="uncategorized")
+            s.add(rec)
+            s.commit()
+            s.refresh(rec)
+            return rec.id
+
+    def _cleanup(self, file_id):
+        from app.db import get_session
+        from app.models import FileRecord
+        with get_session() as s:
+            rec = s.get(FileRecord, file_id)
+            if rec:
+                s.delete(rec)
+                s.commit()
+
+    def test_opens_an_indexed_file(self, tmp_path, monkeypatch):
+        opened = []
+        monkeypatch.setattr("app.api._launch", lambda p: opened.append(p))
+        fid = self._add(tmp_path, "notes.txt", "txt")
+        try:
+            resp = client.post("/api/open", json={"file_id": fid}, headers={"Origin": "http://localhost:5173"})
+            assert resp.status_code == 200
+            assert opened and opened[0].name == "notes.txt"
+        finally:
+            self._cleanup(fid)
+
+    def test_refuses_executables_and_foreign_origins_and_unknown_ids(self, tmp_path, monkeypatch):
+        opened = []
+        monkeypatch.setattr("app.api._launch", lambda p: opened.append(p))
+        exe = self._add(tmp_path, "setup.exe", "exe")
+        txt = self._add(tmp_path, "ok.txt", "txt")
+        try:
+            assert client.post("/api/open", json={"file_id": exe}).status_code == 403
+            assert client.post("/api/open", json={"file_id": txt},
+                               headers={"Origin": "https://evil.example"}).status_code == 403
+            assert client.post("/api/open", json={"file_id": 99999999}).status_code == 404
+            assert opened == []
+        finally:
+            self._cleanup(exe)
+            self._cleanup(txt)
+
+
 class TestQueryEndpoint:
     def test_fast_route_query(self):
         resp = client.post(

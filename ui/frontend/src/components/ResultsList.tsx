@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ResultItem } from '../types'
-import { sendFeedback } from '../api'
+import { openFile, sendFeedback } from '../api'
 
 interface Props {
   results: ResultItem[]
@@ -9,11 +9,21 @@ interface Props {
 }
 
 export function ResultsList({ results, userId, query }: Props) {
+  const [openError, setOpenError] = useState<string | null>(null)
   const [feedbackGiven, setFeedbackGiven] = useState<Record<number, 'thumbs_up' | 'thumbs_down'>>({})
 
   async function handleFeedback(fileId: number, signal: 'thumbs_up' | 'thumbs_down') {
     setFeedbackGiven((prev) => ({ ...prev, [fileId]: signal }))
     await sendFeedback(userId, fileId, query, signal)
+  }
+
+  async function handleOpen(fileId: number) {
+    try {
+      setOpenError(null)
+      await openFile(fileId)
+    } catch (err) {
+      setOpenError(err instanceof Error ? err.message : 'Could not open the file')
+    }
   }
 
   if (results.length === 0) {
@@ -22,11 +32,14 @@ export function ResultsList({ results, userId, query }: Props) {
 
   return (
     <div className="results-list">
+      {openError && <div className="error-banner">{openError}</div>}
       {results.map((r) => (
         <div className="result-card" key={r.file_id}>
           <div className="result-main">
             <div className="result-title-row">
-              <span className="result-filename">{r.filename}</span>
+              <button className="result-filename result-open" onClick={() => handleOpen(r.file_id)} title={`Open ${r.path}`}>
+                {r.filename}
+              </button>
               <span className="result-filetype">{r.file_type}</span>
               <span className="result-topic">{r.topic_cluster}</span>
             </div>

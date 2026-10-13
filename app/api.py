@@ -10,17 +10,21 @@ LangGraph's own `.stream()`, not a fake progress bar.
 from __future__ import annotations
 
 import json
+import os
+import re
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import select
 
 from app.agent.graph import GraphState, get_compiled_graph, run_query
-from app.db import get_session
+from app.db import DATA_DIR, get_session
 from app.models import FileRecord, UserRecord
 from app.personalization.feedback import record_feedback
 from app.personalization.profile_builder import build_user_profile
@@ -118,6 +122,51 @@ def browse(path: str | None = None):
         "home": str(Path.home()),
         "entries": entries,
     }
+
+
+# Never launched from the UI, even if indexed: opening these would run code, not show a document.
+_NEVER_OPEN = {"exe", "bat", "cmd", "com", "msi", "dll", "sh", "command", "app", "jar", "scr", "ps1", "vbs", "lnk", "pkg", "dmg"}
+_LOCAL_ORIGIN = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
+
+
+class OpenRequest(BaseModel):
+    file_id: int
+
+
+def _launch(path: Path) -> None:
+    """Opens a file in the OS default app (this is a local-first app: the backend runs on
+    the same machine as the user)."""
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", str(path)])
+    elif sys.platform == "win32":
+        os.startfile(str(path))  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["xdg-open", str(path)])
+
+
+@app.post("/api/open")
+def open_file(req: OpenRequest, request: Request):
+    """Opens an indexed file by id. Takes an id, not a path, so only files Sift has
+    indexed can be opened, and only when the request comes from a local page."""
+    origin = request.headers.get("origin")
+    if origin and not _LOCAL_ORIGIN.match(origin):
+        raise HTTPException(status_code=403, detail="files can only be opened from the local app")
+
+    with get_session() as session:
+        record = session.get(FileRecord, req.file_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="unknown file")
+    if record.file_type.lower() in _NEVER_OPEN:
+        raise HTTPException(status_code=403, detail=f".{record.file_type} files are not opened from here for safety")
+
+    path = Path(record.path)
+    if not path.is_absolute():
+        path = DATA_DIR / "files_corpus" / record.path
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"file no longer exists: {path}")
+
+    _launch(path)
+    return {"opened": str(path)}
 
 
 @app.post("/api/query")

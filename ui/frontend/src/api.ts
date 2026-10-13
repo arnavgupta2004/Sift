@@ -91,3 +91,15 @@ export async function browseFolder(path?: string): Promise<BrowseResult> {
   }
   return res.json()
 }
+
+export async function openFile(fileId: number): Promise<void> {
+  const res = await fetch('/api/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_id: fileId }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(body.detail ?? 'Could not open the file')
+  }
+}
