@@ -320,7 +320,7 @@
           <rect x="288" y="132" width="150" height="21" rx="5" class="dg-box-accent"/>
           <text class="dg-label-accent" x="363" y="146.5" text-anchor="middle">/api/query/stream</text>
           <rect x="446" y="132" width="104" height="21" rx="5" class="dg-box-accent"/>
-          <text class="dg-label-accent" x="498" y="146.5" text-anchor="middle">/api/ingest</text>
+          <text class="dg-label-accent" x="498" y="146.5" text-anchor="middle">/api/index/status</text>
           <rect x="162" y="159" width="118" height="21" rx="5" class="dg-box-accent"/>
           <text class="dg-label-accent" x="221" y="173.5" text-anchor="middle">/api/feedback</text>
           <rect x="288" y="159" width="188" height="21" rx="5" class="dg-box-accent"/>
@@ -371,12 +371,12 @@
 
           <!-- ingest -->
           <line class="dg-edge-dashed" x1="460" y1="546" x2="460" y2="492" marker-end="url(#ar1)"/>
-          <text class="dg-label" x="472" y="524">ingest (write — one-time / on-demand)</text>
+          <text class="dg-label" x="472" y="524">index (write — continuous, background)</text>
 
           <!-- Data sources -->
           <rect class="dg-box" x="20" y="546" width="880" height="54" rx="10"/>
           <text class="dg-title-sm" x="40" y="568">Data sources</text>
-          <text class="dg-sub" x="40" y="586">Synthetic corpus generator (default demo)  ·  Filesystem connector — POST /api/ingest, crawls a real folder on any OS</text>
+          <text class="dg-sub" x="40" y="586">Background indexer — sweeps the whole laptop, then reads and embeds files  ·  Synthetic corpus generator (tests)</text>
         </svg>
       </div>
       <figcaption>

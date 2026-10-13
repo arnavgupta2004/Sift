@@ -8,7 +8,7 @@ on-device by default** (local Ollama LLM, local embedding/rerank/CLIP models, lo
 no API key required, nothing leaves the machine.
 
 > **Status: complete**, core system (build-order phases 1-9) and extended scope (LightGBM personalization
-> + closed feedback loop, learned router, real filesystem connector as the UI's primary data path,
+> + closed feedback loop, learned router, a background whole-laptop indexer as the real data path,
 > production React/TS UI, Docker + CI, full written report) — see `docs/REPORT.md`. Everything below is real,
 > run, and verified — not aspirational.
 
@@ -106,7 +106,8 @@ Sift/
 │   ├── retrieval/   # filename, metadata, keyword, semantic, hybrid_fusion (RRF from scratch), reranker
 │   ├── personalization/  # profile_builder, personalized_ranker, learned_ranker.py (LightGBM), retrain.py
 │   ├── datasources/  # DataSource interface + filesystem/synthetic implementations
-│   ├── api.py       # FastAPI: /api/query, /api/query/stream (SSE), /api/feedback, /api/personalization
+│   ├── indexer.py   # background whole-laptop indexer (sweep, then read + embed, resumable)
+│   ├── api.py       # FastAPI: /api/query, /api/query/stream (SSE), /api/feedback, /api/personalization, /api/index/status
 │   ├── llm_client.py  # single chokepoint for all LLM calls (Gemini-backed; see note below)
 │   ├── models.py    # shared SQLModel schema
 │   └── tracing.py   # RoutingTrace — the first-class per-stage timing object
@@ -142,10 +143,20 @@ uvicorn app.api:app --reload              # API (POST /api/query, GET /api/query
 cd ui/frontend && npm install && npm run dev   # production React/TS UI (proxies to the API above)
 ```
 
-> **Keeping tests separate from a real-folder index.** Indexing a real folder in the UI replaces the demo
-> corpus in `data/`, and the tests need that demo corpus. To run the tests without touching your own
-> index, point both steps at a separate directory: `SIFT_DATA_DIR=data_test python data/generate_synthetic_data.py`
-> then `SIFT_DATA_DIR=data_test pytest` (the folder is git-ignored; the default is `data/`).
+> **Whole-laptop search.** Starting the API also starts a background indexer that searches your whole
+> machine with no folder to choose (home folder, cloud-sync folders, external drives). Files are findable by
+> name within minutes; their contents become searchable as the indexer reads them, newest documents first
+> (a large laptop takes hours; progress shows under the search box). It is a single-user app: personalization
+> learns from the files you open and rate, and on macOS starts from your recent Spotlight usage. Set
+> `SIFT_AUTO_INDEX=0` to turn it off, or `SIFT_INDEX_ROOTS=/path/a:/path/b` to index only those folders.
+> macOS asks permission the first time it reads Desktop/Documents/Downloads; granting the terminal "Full Disk
+> Access" avoids the prompts. Docker cannot see the host's files unless you mount them, so run natively for
+> the real thing.
+>
+> **Keeping tests separate from your own index.** The tests need the synthetic demo corpus, which would
+> otherwise share `data/` with your real index. Point both steps at a separate directory:
+> `SIFT_DATA_DIR=data_test python data/generate_synthetic_data.py` then `SIFT_DATA_DIR=data_test pytest`
+> (the folder is git-ignored; the default is `data/`).
 
 ### Docker
 

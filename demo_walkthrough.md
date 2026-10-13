@@ -88,24 +88,21 @@ drawn subjects, not just captions.) Point out the **image search** stage in the 
 same space as the text query. No filename or caption text overlaps with the query at
 all; a match can only come from the model actually looking at the image.
 
-## 5. Real data, live — index a real folder from the UI
+## 5. Your whole laptop, no setup
 
-Expand **📁 Index a real folder** at the top of the page, click one of the suggested
-paths (`~/Downloads`, `~/Documents`, `~/Desktop`) or type any local path, and click
-**Index this folder**. This crawls a directory on *this machine* — works identically
-on Windows, macOS, or Linux, since it's a plain filesystem walk, not a browser upload
-— and indexes real, messy files (PDFs, images, code, whatever's actually there)
-alongside the synthetic corpus. Point out the result banner: real file-type counts,
-real total.
+There is no "pick a folder" step. When the server starts, Sift indexes this laptop on its
+own (your home folder, iCloud/OneDrive/Google Drive/Dropbox folders and external drives)
+and keeps itself up to date. Point at the status line under the search box: it shows the
+scan, then how many files are fully searchable. Files are findable **by name within
+minutes** and **by content as reading catches up** (documents first, newest first), so
+you can search the moment the page opens.
 
-Then run a natural-language query about something you know is in that folder — this
-is not a pre-baked demo file, it's the same pipeline finding a file that didn't exist
-in the system a few seconds ago. If a real image happens to match a content query,
-even better: it proves image-content search works on genuine photos, not just the
-synthetic corpus's drawn shapes.
-
-(CLI equivalent, if you'd rather not click through the UI:
-`python data/ingest_datasource.py --root ~/Downloads --max-files 30`)
+Run a natural-language query about something you know is on this machine. This is not a
+pre-baked demo file; it is the same pipeline searching your real files. Click a result's
+name to open the file in its normal app. Opening files and thumbs-up teach the
+personalization: on macOS it also starts from the files Spotlight says you actually used
+in the last 90 days, so the personalization panel reflects real habits from the first
+search.
 
 ## 6. The receipts
 

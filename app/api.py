@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -23,9 +24,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import select
 
+from app import indexer
 from app.agent.graph import GraphState, get_compiled_graph, run_query
 from app.db import DATA_DIR, get_session
-from app.models import FileRecord, UserRecord
+from app.models import AccessEvent, FileRecord, UserRecord
 from app.personalization.feedback import record_feedback
 from app.personalization.profile_builder import build_user_profile
 from app.personalization.temporal_patterns import current_context_boost, detect_recurring_patterns
@@ -34,7 +36,17 @@ from app.tracing import RoutingTrace
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EVAL_RESULTS_DIR = REPO_ROOT / "eval" / "results"
 
-app = FastAPI(title="Agentic File Recommendation and Retrieval API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Sift searches the whole machine: indexing starts with the server and runs in the
+    # background, so search works immediately and keeps getting better. Off for tests.
+    if os.environ.get("SIFT_AUTO_INDEX", "1") != "0":
+        indexer.start()
+    yield
+    indexer.stop()
+
+
+app = FastAPI(title="Agentic File Recommendation and Retrieval API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
@@ -52,85 +64,28 @@ def list_users():
     return [{"id": u.id, "name": u.name, "persona_key": u.persona_key} for u in users]
 
 
-class IngestRequest(BaseModel):
-    root: str
-    max_files: int | None = None  # None = index the whole folder
-    clear_existing: bool = False
-
-
-@app.post("/api/ingest")
-def ingest(req: IngestRequest):
-    """Crawls a real local directory (the backend process's own filesystem — this is a
-    local-first app, not a browser upload) and ingests it into the same FileRecord
-    table + semantic index every other endpoint reads. This is what the UI's "index a
-    real folder" flow calls; see app/datasources/filesystem_source.py."""
-    from app.datasources.filesystem_source import FilesystemDataSource
-    from app.retrieval.semantic_search import build_index
-    from data.ingest_datasource import ingest_files
-
-    try:
-        source = FilesystemDataSource(root=req.root, max_files=req.max_files)
-        raw_files = source.list_files()
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    if not raw_files:
-        raise HTTPException(status_code=400, detail=f"no readable files found under {source.root}")
-
-    with get_session() as session:
-        by_type = ingest_files(raw_files, session, clear_existing=req.clear_existing)
-
-    n_indexed = build_index(force=True)
-
-    return {
-        "root": str(source.root),
-        "n_files_crawled": len(raw_files),
-        "by_type": by_type,
-        "n_indexed_total": n_indexed,
-        "cleared_existing": req.clear_existing,
-    }
-
-
-@app.get("/api/browse")
-def browse(path: str | None = None):
-    """Lists the subfolders of a directory on the machine running the backend, so the
-    UI can offer a folder picker (a browser can't hand a web page a real folder path)."""
-    target = Path(path).expanduser() if path else Path.home()
-    try:
-        target = target.resolve()
-        if not target.is_dir():
-            raise HTTPException(status_code=400, detail=f"not a folder: {target}")
-        children = sorted(target.iterdir(), key=lambda p: p.name.lower())
-    except PermissionError:
-        raise HTTPException(status_code=403, detail=f"no permission to read: {target}")
-    except OSError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-    entries = []
-    for child in children:
-        if child.name.startswith("."):
-            continue
-        try:
-            if child.is_dir():
-                entries.append({"name": child.name, "path": str(child)})
-        except OSError:
-            continue
-
-    return {
-        "path": str(target),
-        "parent": str(target.parent) if target.parent != target else None,
-        "home": str(Path.home()),
-        "entries": entries,
-    }
-
-
 # Never launched from the UI, even if indexed: opening these would run code, not show a document.
 _NEVER_OPEN = {"exe", "bat", "cmd", "com", "msi", "dll", "sh", "command", "app", "jar", "scr", "ps1", "vbs", "lnk", "pkg", "dmg"}
 _LOCAL_ORIGIN = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$")
 
 
+@app.get("/api/me")
+def me():
+    """The one person who uses this laptop. Created on first run."""
+    user_id = indexer.ensure_owner()
+    with get_session() as session:
+        user = session.get(UserRecord, user_id)
+    return {"id": user.id, "name": user.name, "persona_key": user.persona_key}
+
+
+@app.get("/api/index/status")
+def index_status():
+    return indexer.current_status()
+
+
 class OpenRequest(BaseModel):
     file_id: int
+    user_id: int | None = None
 
 
 def _launch(path: Path) -> None:
@@ -166,6 +121,13 @@ def open_file(req: OpenRequest, request: Request):
         raise HTTPException(status_code=404, detail=f"file no longer exists: {path}")
 
     _launch(path)
+    if req.user_id is not None:
+        with get_session() as session:
+            session.add(AccessEvent(
+                user_id=req.user_id, file_id=record.id, action="open",
+                timestamp=datetime.now(), session_id="ui",
+            ))
+            session.commit()
     return {"opened": str(path)}
 
 
@@ -187,6 +149,14 @@ def feedback(req: FeedbackRequest):
         event = record_feedback(req.user_id, req.file_id, req.query, req.signal)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    if req.signal in ("thumbs_up", "opened"):
+        # A positive signal means "I use this file": it feeds the behavioral profile too.
+        with get_session() as session:
+            session.add(AccessEvent(
+                user_id=req.user_id, file_id=req.file_id, action="open",
+                timestamp=datetime.now(), session_id="ui-feedback",
+            ))
+            session.commit()
     return {"id": event.id, "recorded": True}
 
 

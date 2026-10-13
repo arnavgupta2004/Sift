@@ -20,7 +20,7 @@ export function ResultsList({ results, userId, query }: Props) {
   async function handleOpen(fileId: number) {
     try {
       setOpenError(null)
-      await openFile(fileId)
+      await openFile(fileId, userId)
     } catch (err) {
       setOpenError(err instanceof Error ? err.message : 'Could not open the file')
     }

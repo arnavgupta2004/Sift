@@ -119,10 +119,10 @@ jobs:
           python3 -c "
           import json
           data = json.load(open('/tmp/users_response.json'))
-          assert isinstance(data, list) and len(data) == 3, f'expected 3 seeded users, got: {data}'
           names = {u['name'] for u in data}
-          assert names == {'Priya Iyer', 'David Chen', 'Maria Santos'}, f'unexpected users: {names}'
-          print('OK — API is serving the real seeded corpus:', names)
+          seeded = {'Priya Iyer', 'David Chen', 'Maria Santos'}
+          assert seeded <= names, f'seeded personas missing: {seeded - names}'
+          print('OK — API is serving the seeded corpus; users:', names)
           "
 
       - name: Smoke test — a real query round-trips end to end

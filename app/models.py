@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, Index
 from sqlmodel import Field, SQLModel
 
 
@@ -61,3 +61,17 @@ class FeedbackEvent(SQLModel, table=True):
     query: str
     signal: str  # "thumbs_up" | "thumbs_down" | "opened"
     timestamp: datetime = Field(index=True, sa_type=DateTime)
+
+
+class IndexState(SQLModel, table=True):
+    """Where each file is in the background indexer's pipeline (app/indexer.py).
+    stage 0 = its contents still need reading/embedding, stage 1 = fully searchable.
+    priority orders the work: lower runs first (documents before code before images,
+    most recently modified first within each)."""
+
+    __tablename__ = "index_state"
+    __table_args__ = (Index("ix_index_state_stage_priority", "stage", "priority"),)
+
+    file_id: int = Field(primary_key=True, foreign_key="files.id")
+    stage: int = Field(default=0)
+    priority: int = Field(default=0)

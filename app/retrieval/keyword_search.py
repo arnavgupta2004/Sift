@@ -14,7 +14,7 @@ from functools import lru_cache
 from rank_bm25 import BM25Okapi
 from sqlmodel import select
 
-from app.db import get_session
+from app.db import DEFAULT_DB_PATH, get_engine, get_session
 from app.models import FileRecord
 from app.retrieval.base import ScoredFile
 
@@ -51,7 +51,48 @@ def build_index() -> BM25Index:
     return BM25Index(bm25=BM25Okapi(corpus), file_ids=file_ids)
 
 
+def _fts_ready(db_path=DEFAULT_DB_PATH) -> bool:
+    try:
+        with get_engine(db_path).connect() as conn:
+            return conn.exec_driver_sql("SELECT 1 FROM files_fts LIMIT 1").first() is not None
+    except Exception:
+        return False
+
+
+def _fts_search(query: str, limit: int, db_path=DEFAULT_DB_PATH) -> list[ScoredFile]:
+    """BM25 over SQLite's FTS5 index, which the background indexer keeps current. Same
+    ranking idea as the in-memory path (filename weighted 3x body) but it scales to a
+    whole laptop's files and never needs rebuilding."""
+    tokens = tokenize(query)
+    if not tokens:
+        return []
+    match = " OR ".join(f'"{t}"' for t in dict.fromkeys(tokens))
+    with get_engine(db_path).connect() as conn:
+        rows = conn.exec_driver_sql(
+            "SELECT rowid, bm25(files_fts, 3.0, 1.0) FROM files_fts WHERE files_fts MATCH ? "
+            "ORDER BY bm25(files_fts, 3.0, 1.0) LIMIT ?",
+            (match, limit),
+        ).fetchall()
+    if not rows:
+        return []
+    best = max(-score for _, score in rows)  # FTS5 bm25() is lower-is-better and negative
+    if best <= 0:
+        return []
+    return [
+        ScoredFile(
+            file_id=int(rowid),
+            score=(-score) / best,
+            source="keyword",
+            explanation=f"BM25 keyword match, raw score {-score:.2f}",
+        )
+        for rowid, score in rows
+        if -score > 0
+    ]
+
+
 def search(query: str, limit: int = 10) -> list[ScoredFile]:
+    if _fts_ready():
+        return _fts_search(query, limit)
     index = build_index()
     query_tokens = tokenize(query)
     if not query_tokens or not index.file_ids:

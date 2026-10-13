@@ -70,22 +70,20 @@ export interface BaselineStats {
 
 export type BaselineComparison = Record<string, BaselineStats>
 
-export interface IngestResult {
-  root: string
-  n_files_crawled: number
-  by_type: Record<string, number>
-  n_indexed_total: number
-  cleared_existing: boolean
-}
-
 export type SSEEvent =
   | { type: 'route'; tier: string; rationale: string }
   | { type: 'stage'; name: string; duration_ms: number; skipped: boolean; detail: string }
   | { type: 'done'; results: ResultItem[]; routing_trace: RoutingTraceData }
 
-export interface BrowseResult {
-  path: string
-  parent: string | null
-  home: string
-  entries: { name: string; path: string }[]
+
+export interface IndexStatus {
+  running: boolean
+  phase: 'starting' | 'scanning' | 'reading' | 'idle'
+  roots: string[]
+  files_found: number
+  files_searchable: number
+  files_pending: number
+  unreadable_dirs: number
+  last_sweep_finished: string | null
+  last_error: string | null
 }

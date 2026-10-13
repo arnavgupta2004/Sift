@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { getPersonalization, listUsers } from './api'
+import { getMe, getPersonalization } from './api'
 import { streamQuery } from './api'
-import { IndexFolder } from './components/IndexFolder'
+import { IndexStatus } from './components/IndexStatus'
 import { PersonalizationPanel } from './components/PersonalizationPanel'
 import { ResultsList } from './components/ResultsList'
 import { TracePanel } from './components/TracePanel'
@@ -15,8 +15,7 @@ const EXAMPLE_QUERIES = [
 ]
 
 function App() {
-  const [users, setUsers] = useState<UserSummary[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [me, setMe] = useState<UserSummary | null>(null)
   const [query, setQuery] = useState('')
 
   const [tier, setTier] = useState<string | null>(null)
@@ -34,25 +33,22 @@ function App() {
   const cancelRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
-    listUsers()
-      .then((u) => {
-        setUsers(u)
-        if (u.length > 0) setSelectedUserId(u[0].id)
-      })
+    getMe()
+      .then(setMe)
       .catch(() => setApiError('Sift cannot connect right now. Please make sure the Sift service is running, then refresh this page.'))
   }, [])
 
   useEffect(() => {
-    if (selectedUserId === null) return
+    if (me === null) return
     setInsightsLoading(true)
-    getPersonalization(selectedUserId)
+    getPersonalization(me.id)
       .then(setInsights)
       .catch(() => setInsights(null))
       .finally(() => setInsightsLoading(false))
-  }, [selectedUserId, results])
+  }, [me, results])
 
   function runQuery() {
-    if (selectedUserId === null || !query.trim()) return
+    if (me === null || !query.trim()) return
     cancelRef.current?.()
 
     setTier(null)
@@ -66,7 +62,7 @@ function App() {
 
     cancelRef.current = streamQuery(
       query,
-      selectedUserId,
+      me.id,
       (event) => {
         if (event.type === 'route') {
           setTier(event.tier)
@@ -116,7 +112,7 @@ function App() {
             placeholder="e.g. the budget spreadsheet I opened last month"
             aria-label="Describe the file you want to find"
           />
-          <button className="run-button" onClick={runQuery} disabled={isStreaming || !query.trim() || selectedUserId === null}>
+          <button className="run-button" onClick={runQuery} disabled={isStreaming || !query.trim() || me === null}>
             {isStreaming ? 'Finding files…' : 'Find files'}
           </button>
         </div>
@@ -129,24 +125,10 @@ function App() {
           ))}
         </div>
         <div className="search-options">
-          <label className="profile-picker">
-            <span>Personalize for</span>
-            <select
-              value={selectedUserId ?? ''}
-              onChange={(e) => setSelectedUserId(Number(e.target.value))}
-              className="user-select"
-              aria-label="Choose the profile whose file history should personalize results"
-            >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}</option>
-              ))}
-            </select>
-          </label>
+          <IndexStatus />
           <span className="privacy-note">Your files stay on this device.</span>
         </div>
       </section>
-
-      <IndexFolder />
 
       <div className="main-grid">
         <main className="main-column">
@@ -158,7 +140,7 @@ function App() {
               </div>
               {results.length > 0 && <span className="results-count">{results.length} found</span>}
             </div>
-            <ResultsList results={results} userId={selectedUserId ?? 0} query={lastQuery} />
+            <ResultsList results={results} userId={me?.id ?? 0} query={lastQuery} />
           </section>
 
           {(tier || finalTrace) && (

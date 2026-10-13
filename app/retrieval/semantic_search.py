@@ -28,6 +28,9 @@ COLLECTION_NAME = "files"
 MODEL_NAME = os.environ.get("SEMANTIC_MODEL", "all-MiniLM-L6-v2")
 MAX_CHARS = 2000  # per-file text truncation before embedding; corpus docs are short
 CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
+# True while the background indexer (app/indexer.py) owns this index and fills it a few
+# files at a time. In that mode build_index(force=False) must never re-embed everything.
+INCREMENTAL = False
 
 
 @lru_cache(maxsize=1)
@@ -55,6 +58,8 @@ def build_index(force: bool = False) -> int:
     Cheap to call repeatedly: skips work if the index already has the right file count,
     unless force=True."""
     collection = _get_collection()
+    if INCREMENTAL and not force:
+        return collection.count()
 
     with get_session() as session:
         files = session.exec(select(FileRecord)).all()
@@ -80,6 +85,24 @@ def build_index(force: bool = False) -> int:
             documents=docs[i : i + CHROMA_BATCH],
         )
     return len(files)
+
+
+def add_documents(items: list[tuple[int, str, str]]) -> int:
+    """Embeds and upserts (file_id, filename, text) triples - the incremental path the
+    background indexer uses instead of rebuilding the whole index."""
+    if not items:
+        return 0
+    collection = _get_collection()
+    ids = [str(i) for i, _, _ in items]
+    docs = [f"{name}\n{text[:MAX_CHARS]}" for _, name, text in items]
+    embeddings = _get_embedder().encode(docs, show_progress_bar=False, normalize_embeddings=True).tolist()
+    for i in range(0, len(ids), CHROMA_BATCH):
+        collection.upsert(
+            ids=ids[i : i + CHROMA_BATCH],
+            embeddings=embeddings[i : i + CHROMA_BATCH],
+            documents=docs[i : i + CHROMA_BATCH],
+        )
+    return len(ids)
 
 
 def search(query: str, limit: int = 10) -> list[ScoredFile]:

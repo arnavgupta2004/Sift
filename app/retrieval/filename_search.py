@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 
 from rapidfuzz import fuzz, process
+from sqlalchemy import func
 from sqlmodel import select
 
 from app.db import get_session
@@ -35,17 +36,31 @@ def exact_match(filename: str) -> ScoredFile | None:
     )
 
 
+_choices_cache: dict = {"key": None, "choices": {}}
+
+
+def _choices() -> dict[int, str]:
+    """id -> "filename path" for every file. Reads only those three columns (never the
+    extracted text) and is cached until the set of files changes, because on a real
+    laptop this is hundreds of thousands of rows and runs on every query."""
+    with get_session() as session:
+        key = tuple(session.exec(select(func.count(FileRecord.id), func.max(FileRecord.id))).one())
+        if _choices_cache["key"] == key:
+            return _choices_cache["choices"]
+        rows = session.exec(select(FileRecord.id, FileRecord.filename, FileRecord.path)).all()
+    choices = {fid: f"{name} {path}" for fid, name, path in rows if fid is not None}
+    _choices_cache["key"], _choices_cache["choices"] = key, choices
+    return choices
+
+
 def search(query: str, limit: int = 10, score_cutoff: float = 45.0) -> list[ScoredFile]:
     """Fuzzy-matches `query` against filename (weighted higher) and full path.
     score_cutoff is on rapidfuzz's 0-100 scale; results are returned with score in [0, 1].
     """
-    with get_session() as session:
-        files = session.exec(select(FileRecord)).all()
-
-    if not files:
+    choices = _choices()
+    if not choices:
         return []
 
-    choices = {f.id: f"{f.filename} {f.path}" for f in files if f.id is not None}
     matches = process.extract(
         query, choices, scorer=fuzz.WRatio, score_cutoff=score_cutoff, limit=limit,
     )

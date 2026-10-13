@@ -6,6 +6,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from sqlalchemy import event
 from sqlmodel import Session, create_engine
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -18,7 +19,18 @@ DEFAULT_DB_PATH = DATA_DIR / "db.sqlite"
 
 @lru_cache(maxsize=8)
 def get_engine(db_path: Path = DEFAULT_DB_PATH):
-    return create_engine(f"sqlite:///{db_path}")
+    # WAL + a busy timeout let the background indexer write while queries read: the
+    # default rollback journal would make every search wait on (or fail against) a write.
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"timeout": 30})
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.close()
+
+    return engine
 
 
 def get_session(db_path: Path = DEFAULT_DB_PATH) -> Session:

@@ -32,6 +32,7 @@ CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "images_clip"
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
+INCREMENTAL = False  # True while the background indexer owns this index (see semantic_search)
 
 
 @lru_cache(maxsize=1)
@@ -66,28 +67,14 @@ def resolve_image_path(record: FileRecord) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def build_index(force: bool = False) -> int:
-    """Embeds every image file's actual pixel content and upserts into Chroma. Skips
-    work if the index already covers every image file, unless force=True — same
-    pattern as semantic_search.build_index."""
-    collection = _get_collection()
-
-    with get_session() as session:
-        records = session.exec(
-            select(FileRecord).where(FileRecord.file_type.in_(IMAGE_EXTENSIONS))
-        ).all()
-    records = [r for r in records if r.id is not None]
-
-    if not force and collection.count() == len(records):
-        return collection.count()
-
-    if force and collection.count() > 0:
-        existing_ids = collection.get()["ids"]
-        for i in range(0, len(existing_ids), CHROMA_BATCH):
-            collection.delete(ids=existing_ids[i : i + CHROMA_BATCH])
-
+def add_images(records: list[FileRecord]) -> int:
+    """Embeds the pixels of these image files and upserts them. Unreadable or missing
+    files are skipped. The incremental path the background indexer uses."""
+    if not records:
+        return 0
     from PIL import Image
 
+    collection = _get_collection()
     model = _get_clip_model()
     ids: list[str] = []
     embeddings: list[list[float]] = []
@@ -113,6 +100,31 @@ def build_index(force: bool = False) -> int:
             documents=docs[i : i + CHROMA_BATCH],
         )
     return len(ids)
+
+
+def build_index(force: bool = False) -> int:
+    """Embeds every image file's actual pixel content and upserts into Chroma. Skips
+    work if the index already covers every image file, unless force=True — same
+    pattern as semantic_search.build_index."""
+    collection = _get_collection()
+    if INCREMENTAL and not force:
+        return collection.count()
+
+    with get_session() as session:
+        records = session.exec(
+            select(FileRecord).where(FileRecord.file_type.in_(IMAGE_EXTENSIONS))
+        ).all()
+    records = [r for r in records if r.id is not None]
+
+    if not force and collection.count() == len(records):
+        return collection.count()
+
+    if force and collection.count() > 0:
+        existing_ids = collection.get()["ids"]
+        for i in range(0, len(existing_ids), CHROMA_BATCH):
+            collection.delete(ids=existing_ids[i : i + CHROMA_BATCH])
+
+    return add_images(records)
 
 
 def search(query: str, limit: int = 10) -> list[ScoredFile]:

@@ -1,31 +1,20 @@
 import type {
   BaselineComparison,
-  BrowseResult,
-  IngestResult,
+  IndexStatus,
   PersonalizationInsights,
   SSEEvent,
   UserSummary,
 } from './types'
 
-export async function listUsers(): Promise<UserSummary[]> {
-  const res = await fetch('/api/users')
+export async function getMe(): Promise<UserSummary> {
+  const res = await fetch('/api/me')
+  if (!res.ok) throw new Error('Cannot reach the Sift service')
   return res.json()
 }
 
-export async function ingestFolder(
-  root: string,
-  maxFiles: number | null,
-  clearExisting: boolean,
-): Promise<IngestResult> {
-  const res = await fetch('/api/ingest', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ root, max_files: maxFiles, clear_existing: clearExisting }),
-  })
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(body.detail ?? 'Failed to index folder')
-  }
+export async function getIndexStatus(): Promise<IndexStatus> {
+  const res = await fetch('/api/index/status')
+  if (!res.ok) throw new Error('Cannot read indexing status')
   return res.json()
 }
 
@@ -82,21 +71,12 @@ export function streamQuery(
   return () => source.close()
 }
 
-export async function browseFolder(path?: string): Promise<BrowseResult> {
-  const qs = path ? `?path=${encodeURIComponent(path)}` : ''
-  const res = await fetch(`/api/browse${qs}`)
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(body.detail ?? 'Cannot open that folder')
-  }
-  return res.json()
-}
 
-export async function openFile(fileId: number): Promise<void> {
+export async function openFile(fileId: number, userId: number): Promise<void> {
   const res = await fetch('/api/open', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_id: fileId }),
+    body: JSON.stringify({ file_id: fileId, user_id: userId }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
