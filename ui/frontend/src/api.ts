@@ -21,6 +21,7 @@ export async function getIndexStatus(): Promise<IndexStatus> {
 
 export async function getPersonalization(userId: number): Promise<PersonalizationInsights> {
   const res = await fetch(`/api/personalization/${userId}`)
+  if (!res.ok) throw new Error('Cannot read personalization')
   return res.json()
 }
 
@@ -73,11 +74,12 @@ export function streamQuery(
 }
 
 
-export async function openFile(fileId: number, userId: number): Promise<void> {
+/** `query` is the search the file was opened from, if any (recorded as an "opened" signal). */
+export async function openFile(fileId: number, userId: number, query?: string): Promise<void> {
   const res = await fetch('/api/open', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file_id: fileId, user_id: userId }),
+    body: JSON.stringify({ file_id: fileId, user_id: userId, query: query || null }),
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }))
