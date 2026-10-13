@@ -23,6 +23,7 @@ from pathlib import Path
 from sqlmodel import select
 
 from app.config import IMAGE_CLIP_MODEL_NAME as MODEL_NAME
+from app import runtime
 from app.db import DATA_DIR, get_session
 from app.models import FileRecord
 from app.retrieval.base import ScoredFile
@@ -32,7 +33,6 @@ CHROMA_DIR = DATA_DIR / "chroma"
 COLLECTION_NAME = "images_clip"
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg"}
 CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
-INCREMENTAL = False  # True while the background indexer owns this index (see semantic_search)
 
 
 @lru_cache(maxsize=1)
@@ -56,6 +56,22 @@ def _get_collection():
         path=str(CHROMA_DIR), settings=chromadb.Settings(anonymized_telemetry=False)
     )
     return client.get_or_create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
+
+
+_VISUAL_WORDS = {
+    "photo", "photos", "picture", "pictures", "pic", "pics", "image", "images", "screenshot",
+    "screenshots", "diagram", "diagrams", "drawing", "sketch", "logo", "scan", "scanned",
+    "selfie", "wallpaper", "poster", "figure", "chart", "illustration", "meme",
+}
+
+
+def wants_images(intent) -> bool:
+    """Whether a query is about how something looks. CLIP gives similar similarity scores
+    to a genuine visual match and to an unrelated photo, so on a real laptop (thousands
+    of photos and screenshots) searching images for every query puts random pictures into
+    the results of purely textual queries. Gate on the query instead."""
+    words = {w.strip(".,!?\"'()").lower() for w in intent.raw_query.split()}
+    return bool(words & _VISUAL_WORDS) or bool(set(intent.filters.file_types or []) & IMAGE_EXTENSIONS)
 
 
 def resolve_image_path(record: FileRecord) -> Path | None:
@@ -107,7 +123,7 @@ def build_index(force: bool = False) -> int:
     work if the index already covers every image file, unless force=True — same
     pattern as semantic_search.build_index."""
     collection = _get_collection()
-    if INCREMENTAL and not force:
+    if runtime.LIVE and not force:  # see semantic_search.build_index
         return collection.count()
 
     with get_session() as session:

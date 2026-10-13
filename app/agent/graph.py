@@ -18,10 +18,11 @@ from sqlmodel import select
 from app.agent.explain import generate_explanations
 from app.agent.query_understanding import QueryIntent, enrich_with_llm, extract_entities
 from app.agent.router import RouteDecision, route
-from app.config import CANDIDATE_POOL_SIZE, FINAL_RESULT_COUNT
+from app import runtime
+from app.config import CANDIDATE_POOL_SIZE, FINAL_RESULT_COUNT, LIVE_PERSONALIZATION_ALPHA
 from app.db import get_session
 from app.models import FileRecord
-from app.personalization.personalized_ranker import WeightedSumPersonalizer
+from app.personalization.personalized_ranker import PersonalizationWeights, WeightedSumPersonalizer
 from app.retrieval import filename_search, image_search, keyword_search, metadata_search, semantic_search
 from app.retrieval.base import ScoredFile
 from app.retrieval.hybrid_fusion import reciprocal_rank_fusion
@@ -123,6 +124,14 @@ def node_fast_retrieve(state: GraphState) -> dict:
     return {"candidates": candidates}
 
 
+def _image_results(trace: RoutingTrace, intent: QueryIntent) -> list[ScoredFile]:
+    if runtime.LIVE and not image_search.wants_images(intent):
+        trace.skip("image_search", "query is not about how something looks")
+        return []
+    with trace.stage("image_search", detail="CLIP content match over indexed images"):
+        return image_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
+
+
 def node_standard_retrieve(state: GraphState) -> dict:
     trace = state["trace"]
     intent = state["intent"]
@@ -142,16 +151,22 @@ def node_standard_retrieve(state: GraphState) -> dict:
     with trace.stage("semantic_search"):
         sem_results = semantic_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
 
-    with trace.stage("image_search", detail="CLIP content match over indexed images"):
-        img_results = image_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
-
-    trace.skip("reranker", "standard route: no cross-encoder pass")
+    img_results = _image_results(trace, intent)
 
     with trace.stage("hybrid_fusion", detail="metadata+keyword+semantic+image"):
         candidates = reciprocal_rank_fusion(
             [lst for lst in (meta_results, kw_results, sem_results, img_results) if lst],
             limit=CANDIDATE_POOL_SIZE,
         )
+
+    if runtime.LIVE and candidates:
+        # On a real laptop, fusion alone lets a file that merely sits mid-list in every
+        # retriever beat the one file that is the best match in the keyword results, so
+        # standard also reranks (still no LLM call). The evaluated pipeline skips this.
+        with trace.stage("reranker", detail="whole-laptop mode: rerank before personalizing"):
+            candidates = rerank(intent.search_query, candidates, top_k=CANDIDATE_POOL_SIZE)
+    else:
+        trace.skip("reranker", "standard route: no cross-encoder pass")
 
     return {"candidates": candidates}
 
@@ -175,8 +190,7 @@ def node_deep_retrieve(state: GraphState) -> dict:
     with trace.stage("semantic_search"):
         sem_results = semantic_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
 
-    with trace.stage("image_search", detail="CLIP content match over indexed images"):
-        img_results = image_search.search(intent.search_query, limit=CANDIDATE_POOL_SIZE)
+    img_results = _image_results(trace, intent)
 
     with trace.stage("hybrid_fusion", detail="metadata+keyword+semantic+image"):
         fused = reciprocal_rank_fusion(
@@ -205,7 +219,8 @@ def node_personalize(state: GraphState) -> dict:
         return {"personalized": state["candidates"][:FINAL_RESULT_COUNT]}
 
     with trace.stage("personalization"):
-        personalized = WeightedSumPersonalizer().rank(
+        weights = PersonalizationWeights(alpha=LIVE_PERSONALIZATION_ALPHA) if runtime.LIVE else None
+        personalized = WeightedSumPersonalizer(weights).rank(
             state["user_id"], state["candidates"], now=state["now"]
         )
     return {"personalized": personalized[:FINAL_RESULT_COUNT]}

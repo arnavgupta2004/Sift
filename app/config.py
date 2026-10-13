@@ -29,6 +29,13 @@ CANDIDATE_POOL_SIZE = 20
 # How many results are returned to the caller after personalization.
 FINAL_RESULT_COUNT = 10
 
+# --- Whole-laptop (LIVE) mode, see app/runtime.py ---------------------------------
+# With one real user and a huge file set, personalization should nudge near-ties, not
+# overrule relevance: a recently used but off-topic file must not outrank the file that
+# actually matches the query. (The synthetic-persona evaluation uses PersonalizationWeights'
+# default alpha of 0.6.)
+LIVE_PERSONALIZATION_ALPHA = 0.85
+
 # --- Hybrid fusion (app/retrieval/hybrid_fusion.py) -------------------------------
 # The RRF damping constant — the standard default from the original RRF paper.
 RRF_K = 60

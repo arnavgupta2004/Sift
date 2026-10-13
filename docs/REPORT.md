@@ -723,3 +723,26 @@ here came from running code, not from describing what the code should do — inc
 the numbers that didn't come out looking good, and including the ones that only
 existed because running the code live surfaced a bug reasoning about it never would
 have.
+
+## Appendix: whole-laptop mode (the running app) vs. the evaluated pipeline
+
+Every number in this report was measured on the synthetic corpus with the pipeline described above. The running
+app searches a real laptop through a background indexer (`app/indexer.py`) and, once that is active
+(`app/runtime.py: LIVE`), differs from the evaluated pipeline in the ways below. The evaluation harnesses and tests
+never turn it on, so the reported results stay reproducible.
+
+| Area | Evaluated pipeline | Whole-laptop mode | Why |
+|---|---|---|---|
+| Keyword search | in-memory BM25 over all files | SQLite FTS5 (BM25), kept current by the indexer | scales to hundreds of thousands of files without rebuilding |
+| Standard tier | fusion, no reranker | fusion, then cross-encoder rerank (still no LLM call) | on real files a mid-list-everywhere file outranked the best keyword match |
+| Image search | every non-fast query | only when the query is about how something looks | CLIP scores a document query and an unrelated photo alike; photos leaked into text results |
+| Personalization weight | alpha 0.6 | alpha 0.85 | one real user's recent files must not outrank the file that matches the query |
+| Vector indexes | rebuilt when the file count changes | grown incrementally, never rebuilt by a search | a rebuild would re-embed the whole machine |
+
+Two fixes apply in both modes because they change no evaluated decision (checked against all 49 labelled queries): the
+router no longer sends a purely topical query (no filename, no type/date filter) to the fast tier, which only sees
+filenames, and the synthetic access log anchors each week to its Monday (previously a persona's "Monday" session fell on
+whatever weekday the corpus was generated, which made one test fail on every day but Monday).
+
+Checked by hand on a real laptop (11 queries, labels are my judgment): first-place hits rose from 6 of 10 to 9 of 11
+after these changes, with the right file in the top 3 for all 11. That is a small, informal sample, not a benchmark.

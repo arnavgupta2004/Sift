@@ -18,6 +18,7 @@ from pathlib import Path
 
 from sqlmodel import select
 
+from app import runtime
 from app.db import DATA_DIR, get_session
 from app.models import FileRecord
 from app.retrieval.base import ScoredFile
@@ -28,9 +29,6 @@ COLLECTION_NAME = "files"
 MODEL_NAME = os.environ.get("SEMANTIC_MODEL", "all-MiniLM-L6-v2")
 MAX_CHARS = 2000  # per-file text truncation before embedding; corpus docs are short
 CHROMA_BATCH = 5000  # chromadb rejects a single write larger than ~5461 items
-# True while the background indexer (app/indexer.py) owns this index and fills it a few
-# files at a time. In that mode build_index(force=False) must never re-embed everything.
-INCREMENTAL = False
 
 
 @lru_cache(maxsize=1)
@@ -58,7 +56,9 @@ def build_index(force: bool = False) -> int:
     Cheap to call repeatedly: skips work if the index already has the right file count,
     unless force=True."""
     collection = _get_collection()
-    if INCREMENTAL and not force:
+    if runtime.LIVE and not force:
+        # The background indexer owns this index and fills it a few files at a time; a
+        # search must never trigger a rebuild that re-embeds the whole machine.
         return collection.count()
 
     with get_session() as session:

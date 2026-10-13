@@ -35,6 +35,7 @@ from pathlib import Path
 from sqlalchemy import func
 from sqlmodel import Session, SQLModel, select
 
+from app import runtime
 from app.config import MAX_EXTRACTED_CONTENT_CHARS
 from app.datasources.filesystem_source import TEXT_NATIVE_EXTENSIONS, _extract_text
 from app.db import DATA_DIR, DEFAULT_DB_PATH, get_engine
@@ -523,13 +524,7 @@ class Indexer:
         engine = get_engine(self.db_path)
         ensure_schema(engine)
         self.status.running, self.status.phase = True, "starting"
-        if self.embed:
-            # From here on the vector indexes are owned by this thread: searches must
-            # never trigger a full rebuild (it would re-embed the whole machine).
-            from app.retrieval import image_search, semantic_search
-
-            semantic_search.INCREMENTAL = True
-            image_search.INCREMENTAL = True
+        runtime.LIVE = True  # from here on, searches must never trigger a full vector rebuild
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="sift-indexer", daemon=True)
         self._thread.start()
@@ -537,6 +532,7 @@ class Indexer:
     def stop(self) -> None:
         self._stop.set()
         self.status.running = False
+        runtime.LIVE = False
 
     def _run(self) -> None:
         engine = get_engine(self.db_path)

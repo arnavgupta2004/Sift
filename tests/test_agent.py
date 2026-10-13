@@ -1,5 +1,7 @@
 from sqlmodel import select
 
+from app import runtime
+from app.agent import router as router_module
 from app.agent.graph import run_query
 from app.agent.query_understanding import extract_entities
 from app.agent.router import route
@@ -58,6 +60,30 @@ class TestRouter:
         assert decision.tier == "deep"
 
 
+class TestFastTierNeedsAReason:
+    """A topical query ("game theory lecture notes") has no filename or filter for the
+    fast tier (filename + metadata only) to use, so no classifier may send it there."""
+
+    class _StubLearned:
+        is_available = True
+
+        def classify(self, intent):
+            from types import SimpleNamespace
+            return SimpleNamespace(tier="fast", confidence=0.95)
+
+    def test_topical_query_is_raised_from_fast_to_standard(self, monkeypatch):
+        monkeypatch.setattr(router_module, "_get_learned_router", lambda: self._StubLearned())
+        decision = route(extract_entities("game theory lecture notes"))
+        assert decision.tier == "standard"
+        assert "raised to standard" in decision.rationale
+
+    def test_a_query_with_a_filter_may_still_be_fast(self, monkeypatch):
+        monkeypatch.setattr(router_module, "_get_learned_router", lambda: self._StubLearned())
+        decision = route(extract_entities("pdf lecture notes about game theory from last week"))
+        assert decision.tier == "fast"
+        assert "raised" not in decision.rationale
+
+
 class TestGraphEndToEnd:
     def test_fast_route_skips_expensive_stages(self):
         out = run_query("show me my pptx files from last week", _first_user_id())
@@ -75,6 +101,21 @@ class TestGraphEndToEnd:
         assert {"keyword_search", "semantic_search", "hybrid_fusion"} <= ran
         skipped = {s["name"] for s in trace["stages"] if s["skipped"]}
         assert "reranker" in skipped
+
+    def test_live_mode_standard_route_reranks_before_personalizing(self, monkeypatch):
+        monkeypatch.setattr(runtime, "LIVE", True)
+        out = run_query("find my recent notes about transformers", _first_user_id())
+        trace = out["routing_trace"]
+        assert trace["tier"] == "standard"
+        ran = {s["name"] for s in trace["stages"] if not s["skipped"]}
+        assert {"hybrid_fusion", "reranker", "personalization"} <= ran
+        assert trace["llm_call_count"] == 0  # still no LLM on the standard tier
+
+    def test_live_mode_skips_image_search_for_a_textual_query(self, monkeypatch):
+        monkeypatch.setattr(runtime, "LIVE", True)
+        out = run_query("find my recent notes about transformers", _first_user_id())
+        skipped = {s["name"]: s["detail"] for s in out["routing_trace"]["stages"] if s["skipped"]}
+        assert "image_search" in skipped and "look" in skipped["image_search"]
 
     def test_deep_route_runs_full_pipeline(self):
         out = run_query(

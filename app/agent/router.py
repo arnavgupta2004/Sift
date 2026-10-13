@@ -75,6 +75,22 @@ def _llm_classify(intent: QueryIntent) -> RouteDecision | None:
     return None
 
 
+def _fast_is_possible(intent: QueryIntent) -> bool:
+    """The fast tier only looks at filenames and metadata, so it can only answer a query
+    that names a file or is a filter on type/date/topic. A topical query ("game theory
+    lecture notes") has nothing for it to match on but filename text, and loses to files
+    whose names merely echo a word of the query."""
+    f = intent.filters
+    return bool(intent.exact_filename or f.file_types or f.modified_after or f.topic_cluster or f.filename_contains)
+
+
+def _no_fast_without_a_reason(decision: RouteDecision, intent: QueryIntent) -> RouteDecision:
+    if decision.tier == "fast" and not _fast_is_possible(intent):
+        decision.tier = "standard"
+        decision.rationale += "; raised to standard: topical query, no filename or filter for the fast tier to use"
+    return decision
+
+
 def route(intent: QueryIntent) -> RouteDecision:
     if intent.exact_filename:
         return RouteDecision(
@@ -107,18 +123,18 @@ def route(intent: QueryIntent) -> RouteDecision:
     if learned.is_available:
         learned_decision = learned.classify(intent)
         if learned_decision and learned_decision.confidence >= LOW_CONFIDENCE_THRESHOLD:
-            return RouteDecision(
+            return _no_fast_without_a_reason(RouteDecision(
                 tier=learned_decision.tier,
                 rationale=(
                     f"learned router classification (confidence={learned_decision.confidence:.2f}), "
                     "approximates LLM judgment without calling it"
                 ),
                 used_learned_router=True,
-            )
+            ), intent)
 
     llm_decision = _llm_classify(intent)
     if llm_decision:
-        return llm_decision
+        return _no_fast_without_a_reason(llm_decision, intent)
 
     return RouteDecision(
         tier="standard",
