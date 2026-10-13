@@ -48,6 +48,7 @@ def simulate_access_log(
 
     end_date = datetime.now()
     start_date = end_date - timedelta(weeks=weeks)
+    start_monday = start_date - timedelta(days=start_date.weekday())
 
     events: list[AccessEvent] = []
     recurring_files_by_user: dict[int, dict[int, list[int]]] = {}
@@ -64,7 +65,9 @@ def simulate_access_log(
         }
 
         for week_idx in range(weeks):
-            week_start = start_date + timedelta(weeks=week_idx)
+            # Anchor each week to its Monday. Offsetting from an arbitrary start day made a
+            # persona's "Monday" session land on whatever weekday the corpus was generated.
+            week_start = start_monday + timedelta(weeks=week_idx)
 
             for weekday, fixed_files in recurring_files.items():
                 day = week_start + timedelta(days=weekday)

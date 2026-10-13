@@ -139,7 +139,14 @@ jobs:
           "
 
       - name: Smoke test — frontend serves the app
-        run: curl -sf http://localhost:5173/ -o /dev/null -w "frontend HTTP %{http_code}\n"
+        # The frontend container only starts once the api's healthcheck passes, which can
+        # lag the first successful /api/users response, so poll instead of a single curl.
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5173/ -o /dev/null; then echo "frontend reachable"; exit 0; fi
+            sleep 2
+          done
+          echo "frontend never became reachable"; docker compose ps; exit 1
 
       - name: Show container status and logs on failure
         if: failure()
