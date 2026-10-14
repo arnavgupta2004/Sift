@@ -5,13 +5,14 @@ full-text search over what it read, and the single laptop user."""
 import os
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlmodel import Session, select
 
 from app import indexer
 from app.db import get_engine
-from app.models import FileRecord, IndexState, UserRecord
+from app.models import AccessEvent, FileRecord, IndexState, UserRecord
 from app.retrieval import keyword_search
 
 
@@ -142,6 +143,34 @@ class TestSingleUser:
         with Session(get_engine(db)) as s:
             owners = s.exec(select(UserRecord).where(UserRecord.persona_key == "owner")).all()
         assert len(owners) == 1 and owners[0].name
+
+    def test_linux_recent_files_seed_the_profile_once(self, env, monkeypatch, tmp_path):
+        db, root, status, stop = env
+        used = _write(root, "notes/plan.md")
+        _write(root, "notes/other.md")
+        indexer.sweep([root], status, stop, db)
+        recent = datetime.now(timezone.utc) - timedelta(days=2)
+        (tmp_path / "recently-used.xbel").write_text(f"""<?xml version="1.0" encoding="UTF-8"?>
+<xbel version="1.0" xmlns:bookmark="http://www.freedesktop.org/standards/desktop-bookmarks">
+  <bookmark href="{used.as_uri()}" visited="{recent:%Y-%m-%dT%H:%M:%S.%fZ}">
+    <info><metadata owner="http://freedesktop.org"><bookmark:applications>
+      <bookmark:application name="gedit" count="2"/><bookmark:application name="vim" count="1"/>
+    </bookmark:applications></metadata></info>
+  </bookmark>
+  <bookmark href="file:///not/indexed.txt" visited="{recent:%Y-%m-%dT%H:%M:%S.%fZ}"/>
+  <bookmark href="{used.parent.as_uri()}/old.md" visited="2001-01-01T00:00:00Z"/>
+</xbel>""")
+        monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+        monkeypatch.setattr(indexer.sys, "platform", "linux")
+        owner = indexer.ensure_owner(db)
+
+        assert indexer.seed_from_recent_history(owner, db) == 3  # opened 3 times, across 2 apps
+        assert indexer.seed_from_recent_history(owner, db) == 0  # only ever seeded once
+        with Session(get_engine(db)) as s:
+            events = s.exec(select(AccessEvent)).all()
+        plan, _ = _by_name(db, "plan.md")
+        assert {e.file_id for e in events} == {plan.id}
+        assert abs(max(e.timestamp for e in events) - (datetime.now() - timedelta(days=2))) < timedelta(minutes=1)
 
 
 class TestRoots:
