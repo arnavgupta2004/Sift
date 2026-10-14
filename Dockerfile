@@ -9,7 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# pynput (the desktop hotkey) is skipped: a container can't see the keyboard, and on
+# Linux it pulls in evdev, which needs kernel headers this slim image doesn't have.
+RUN grep -v '^pynput' requirements.txt > /tmp/requirements.txt \
+    && pip install --no-cache-dir -r /tmp/requirements.txt
 
 COPY app/ app/
 COPY data/ data/

@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -37,12 +38,26 @@ from app.tracing import RoutingTrace
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EVAL_RESULTS_DIR = REPO_ROOT / "eval" / "results"
 
+def _warm_up_models() -> None:
+    """Loads the search models in the background at startup, so the first search answers
+    in a second or two instead of waiting ~30s for them to load."""
+    from app.retrieval.reranker import _get_cross_encoder
+    from app.retrieval.semantic_search import _get_embedder
+
+    try:
+        _get_embedder().encode(["warm up"])
+        _get_cross_encoder().predict([("warm up", "warm up")])
+    except Exception:  # a failed warm-up only means the first search loads them instead
+        pass
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # Sift searches the whole machine: indexing starts with the server and runs in the
     # background, so search works immediately and keeps getting better. Off for tests.
     if os.environ.get("SIFT_AUTO_INDEX", "1") != "0":
         indexer.start()
+        threading.Thread(target=_warm_up_models, name="sift-warmup", daemon=True).start()
     yield
     indexer.stop()
 
@@ -303,3 +318,38 @@ def baseline_comparison():
     if not path.exists():
         raise HTTPException(status_code=404, detail="run eval/baseline_comparison.py first")
     return json.loads(path.read_text())
+
+
+# The built web app (ui/frontend/dist), so `python -m app.launcher` serves everything from
+# one local address. Mounted last: every /api route above takes precedence. Absent in
+# development (Vite serves the UI) and in Docker (nginx does).
+_UI_DIST = REPO_ROOT / "ui" / "frontend" / "dist"
+if _UI_DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    class _UIFiles(StaticFiles):
+        """Built assets have content hashes in their names and never change, so they can
+        be cached for good; index.html (and the favicon) must be re-checked every time,
+        or a rebuilt app keeps showing the old one."""
+
+        async def __call__(self, scope, receive, send):
+            # An unknown /api/... address is a missing endpoint, never a web page.
+            if scope["path"].startswith("/api/"):
+                from fastapi.responses import JSONResponse
+
+                return await JSONResponse({"detail": "Not Found"}, status_code=404)(scope, receive, send)
+            await super().__call__(scope, receive, send)
+
+        async def get_response(self, path, scope):
+            response = await super().get_response(path, scope)
+            immutable = path.startswith("assets/")
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if immutable else "no-cache"
+            return response
+
+    @app.get("/quick-search", include_in_schema=False)
+    def quick_search_window():
+        """The system-wide shortcut's window. Its own address gives the window its own
+        identity on the desktop, so it shows Sift's icon (see app/launcher.py)."""
+        return FileResponse(_UI_DIST / "index.html", headers={"Cache-Control": "no-cache"})
+
+    app.mount("/", _UIFiles(directory=_UI_DIST, html=True), name="ui")

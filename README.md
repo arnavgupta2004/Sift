@@ -1,5 +1,39 @@
 # Sift: Agentic File Recommendation and Retrieval System
 
+**Sift finds files on your computer from a description.** Type what you remember ("the budget spreadsheet
+from last month", "notes about transformers") and it searches names, contents and even what's in your
+pictures, then ranks the results by how well they match and by the files you actually use. Press
+**Ctrl+Alt+Space** (⌘⇧Space on a Mac) from anywhere to search, like Spotlight. Everything runs on your
+machine: no account, no API key, and your files never leave your computer.
+
+![Sift's quick search: type a description, get the five best matches with a preview](docs/images/quick-search.png)
+
+## Quick start
+
+You need **Python 3.11** and **Node.js 20+**.
+
+```bash
+git clone https://github.com/arnavgupta2004/Sift.git && cd Sift
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt        # Windows: .venv\Scripts\pip install -r requirements.txt
+./sift                                           # Windows: .venv\Scripts\python -m app.launcher
+```
+
+The first run builds the web app, then opens Sift at `http://127.0.0.1:8000` and starts indexing your files
+in the background. Names are searchable within minutes; contents take longer on a big drive (progress shows
+under the search box). Then:
+
+- Press **Ctrl+Alt+Space** (⌘⇧Space on a Mac) anywhere to open the quick search. **↑/↓** moves, **Enter**
+  opens the file, **Esc** closes.
+- Inside the app, **Ctrl+K** / **⌘K** opens the same quick search.
+- **👍 / 👎** on a result, and the files you open, teach Sift what you use.
+
+On macOS, allow Accessibility access when asked (that's what lets the shortcut work everywhere). On Linux with
+GNOME, the shortcut is added to your keyboard settings and keeps working after you close Sift. Other
+desktops, the Docker setup, and every option are covered in [Running it](#running-it) below.
+
+---
+
 An agentic file-search system that understands a natural-language query, decides *which* retrieval
 strategies it actually needs (filename/fuzzy, metadata, keyword BM25, semantic embeddings, CLIP image
 content, or a hybrid of these), personalizes results to the requesting user's behavioral history, and
@@ -129,6 +163,35 @@ Sift/
 ```
 
 ## Running it
+
+### As an app (with the quick-search shortcut)
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+./sift                     # Windows: python -m app.launcher
+```
+
+This builds the web app on first run (needs Node.js), starts Sift at `http://127.0.0.1:8000` (local
+only), opens it in your browser, and turns on a system-wide shortcut, **Ctrl+Alt+Space** (⌘⇧Space on a
+Mac, since macOS uses Ctrl+Option+Space for switching keyboard languages), that opens a Spotlight-style quick-search window from any screen. In that window, ↑/↓ moves, Enter opens
+the file, Esc closes it, and Ctrl+Enter (⌘+Enter on a Mac) shows the search on the full page. Inside the page itself,
+Ctrl+K / ⌘K opens the same search as a pop-up.
+
+How the shortcut is wired depends on what the desktop allows:
+
+| Desktop | How it works |
+|---|---|
+| Windows, macOS, Linux (X11) | `./sift` listens for the keys while it runs. macOS asks once for Accessibility access. |
+| Linux, GNOME on Wayland | Registered as a GNOME custom shortcut. Keeps working after `./sift` exits and starts Sift when pressed. |
+| Linux, other Wayland desktops | Wayland lets no app watch the keyboard: `./sift` prints a command to bind in your desktop's keyboard settings. |
+| Docker | Not available (a container can't see your keyboard). Use Ctrl+K inside the page. |
+
+The quick-search window opens as its own small app window when Chrome, Edge, Chromium or Brave is installed,
+otherwise as a browser tab. Change the keys with `SIFT_HOTKEY` (pynput format, e.g. `"<ctrl>+<shift>+<space>"`)
+and the port with `SIFT_PORT`. `./sift stop` stops a server the shortcut started in the background;
+`./sift shortcut --remove` unregisters the GNOME shortcut.
+
+### For development
 
 ```bash
 python -m venv .venv && source .venv/bin/activate

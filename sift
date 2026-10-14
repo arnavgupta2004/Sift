@@ -1,0 +1,6 @@
+#!/bin/sh
+# Starts Sift as a local web app with the system-wide quick-search shortcut.
+# Usage: ./sift [run|spotlight|stop|shortcut [--remove]]   (see app/launcher.py)
+cd "$(dirname "$0")" || exit 1
+if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
+exec "$PY" -m app.launcher "$@"
