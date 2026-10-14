@@ -28,6 +28,14 @@ LOW_CONFIDENCE_THRESHOLD = 0.6
 CANDIDATE_POOL_SIZE = 20
 # How many results are returned to the caller after personalization.
 FINAL_RESULT_COUNT = 10
+# The app shows only the best few (the evaluation keeps FINAL_RESULT_COUNT for NDCG@10).
+LIVE_RESULT_COUNT = 5
+# Display confidence: each result's score is compared with the whole candidate pool
+# (z-score), then squashed to 0-1. Raw scores sit in a narrow band (RRF and the
+# personalization blend both compress them), so showing them directly made every result
+# look about equally good; this shows how far each one stands out from the rest instead.
+CONFIDENCE_GAIN = 1.6
+CONFIDENCE_OFFSET = 1.2
 
 # --- Whole-laptop (LIVE) mode, see app/runtime.py ---------------------------------
 # With one real user and a huge file set, personalization should nudge near-ties, not
