@@ -321,7 +321,7 @@ if _UI_DIST.is_dir():
 
         async def get_response(self, path, scope):
             response = await super().get_response(path, scope)
-            immutable = path.startswith("assets/")
+            immutable = path.replace("\\", "/").startswith("assets/")  # path uses the OS separator
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if immutable else "no-cache"
             return response
 
