@@ -239,7 +239,9 @@ accounts for this) — no manual setup. See `Dockerfile`, `docker-entrypoint.sh`
 
 `.github/workflows/ci.yml` runs on every push/PR: regenerates the corpus, runs the full test
 suite, runs the entire eval harness, diffs the freshly generated `eval/results/` against what's
-committed (reported in the job summary), and separately type-checks + builds the React UI. No
+committed (reported in the job summary), and separately type-checks + builds the React UI. A
+cross-platform job repeats the install, the test suite and an app smoke test (the page, the quick-search
+window and a real search) on **macOS and Windows**. No
 `GEMINI_API_KEY` secret is configured for CI, so it exercises the rule-based fallback paths —
 consistent with what the system is designed to degrade to.
 

@@ -62,6 +62,102 @@ jobs:
           name: eval-results
           path: eval/results/
 
+  cross-platform:
+    # Sift is a desktop app as much as a server: prove it installs, passes its tests, and
+    # serves the app and the quick-search window on macOS and Windows too (Linux is covered
+    # by the jobs above). The evaluation harness only runs on Linux; it is OS-independent.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: ui/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # lightgbm's macOS wheel looks for libomp in Homebrew's location. Point it at the
+      # copy torch bundles: two OpenMP runtimes in one process segfault.
+      - name: Share torch's libomp with lightgbm (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          omp="$(python -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib", "libomp.dylib"))')"
+          test -f "$omp"
+          sudo mkdir -p /opt/homebrew/opt/libomp/lib
+          sudo ln -sf "$omp" /opt/homebrew/opt/libomp/lib/libomp.dylib
+          python -c "import lightgbm, torch; print('lightgbm', lightgbm.__version__, 'torch', torch.__version__)"
+
+      - name: Build the web app
+        working-directory: ui/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Generate synthetic corpus and eval set
+        run: |
+          python data/generate_synthetic_data.py
+          python eval/build_eval_set.py
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: The quick-search shortcut's key listener loads
+        run: |
+          python -m app.launcher --help
+          python -c "from pynput import keyboard; from app import launcher; print('hotkey:', launcher._pretty(launcher.HOTKEY))"
+
+      - name: Smoke test — the app, the quick-search window and a search
+        run: |
+          SIFT_AUTO_INDEX=0 python -m uvicorn app.api:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
+          python - <<'EOF'
+          import json, time, urllib.request
+
+          base = "http://127.0.0.1:8000"
+          for _ in range(120):
+              try:
+                  urllib.request.urlopen(f"{base}/api/me", timeout=2)
+                  break
+              except OSError:
+                  time.sleep(2)
+          else:
+              raise SystemExit("server never came up")
+
+          for path in ("/", "/quick-search"):
+              page = urllib.request.urlopen(base + path).read().decode()
+              assert '<div id="root">' in page, f"{path} did not serve the web app"
+              print("OK", path)
+
+          req = urllib.request.Request(
+              f"{base}/api/query", method="POST", headers={"Content-Type": "application/json"},
+              data=json.dumps({"query": "open gradient_descent_v2.md", "user_id": 1}).encode(),
+          )
+          body = json.load(urllib.request.urlopen(req, timeout=300))
+          assert body["results"], "search returned nothing"
+          print("OK search:", body["routing_trace"]["tier"], "->", body["results"][0]["filename"])
+          EOF
+
+      - name: Server log on failure
+        if: failure()
+        run: cat server.log || true
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
