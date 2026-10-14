@@ -91,13 +91,19 @@ jobs:
           cache: "npm"
           cache-dependency-path: ui/frontend/package-lock.json
 
-      # lightgbm's macOS wheel links against libomp, which the runner doesn't ship.
-      - name: Install libomp (macOS)
-        if: runner.os == 'macOS'
-        run: brew install libomp
-
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      # lightgbm's macOS wheel looks for libomp in Homebrew's location. Point it at the
+      # copy torch bundles: two OpenMP runtimes in one process segfault.
+      - name: Share torch's libomp with lightgbm (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          omp="$(python -c 'import os, torch; print(os.path.join(os.path.dirname(torch.__file__), "lib", "libomp.dylib"))')"
+          test -f "$omp"
+          sudo mkdir -p /opt/homebrew/opt/libomp/lib
+          sudo ln -sf "$omp" /opt/homebrew/opt/libomp/lib/libomp.dylib
+          python -c "import lightgbm, torch; print('lightgbm', lightgbm.__version__, 'torch', torch.__version__)"
 
       - name: Build the web app
         working-directory: ui/frontend
