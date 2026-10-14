@@ -9,19 +9,29 @@ eval/latency_comparison.py are both ultimately reading the behavior of.
 
 from __future__ import annotations
 
+import math
+import statistics
 from datetime import datetime
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
+from sqlalchemy import func
 from sqlmodel import select
 
 from app.agent.explain import generate_explanations
 from app.agent.query_understanding import QueryIntent, enrich_with_llm, extract_entities
 from app.agent.router import RouteDecision, route
 from app import runtime
-from app.config import CANDIDATE_POOL_SIZE, FINAL_RESULT_COUNT, LIVE_PERSONALIZATION_ALPHA
+from app.config import (
+    CANDIDATE_POOL_SIZE,
+    CONFIDENCE_GAIN,
+    CONFIDENCE_OFFSET,
+    FINAL_RESULT_COUNT,
+    LIVE_PERSONALIZATION_ALPHA,
+    LIVE_RESULT_COUNT,
+)
 from app.db import get_session
-from app.models import FileRecord
+from app.models import AccessEvent, FileRecord
 from app.personalization.personalized_ranker import PersonalizationWeights, WeightedSumPersonalizer
 from app.retrieval import filename_search, image_search, keyword_search, metadata_search, semantic_search
 from app.retrieval.base import ScoredFile
@@ -39,9 +49,30 @@ class GraphState(TypedDict, total=False):
     decision: RouteDecision
     candidates: list[ScoredFile]
     personalized: list[ScoredFile]
+    pool_scores: list[float]
     explanations: dict[int, str]
     final_results: list[dict[str, Any]]
     trace: RoutingTrace
+
+
+def _result_count() -> int:
+    return LIVE_RESULT_COUNT if runtime.LIVE else FINAL_RESULT_COUNT
+
+
+def confidences(scores: list[float], pool: list[float]) -> list[float]:
+    """How strongly each result stands out from the whole candidate pool, in [0, 1].
+    Raw scores are bunched together (e.g. RRF puts its #1 and #10 within 15% of each
+    other), so this z-scores against the pool and squashes with a logistic: a clear
+    winner reads ~0.95+, a pack of near-equals reads as a pack. With too few candidates
+    to compare against, the raw (already 0-1) score is used as is."""
+    if len(pool) < 4:
+        return [max(0.0, min(1.0, s)) for s in scores]
+    mean = statistics.fmean(pool)
+    spread = max(statistics.pstdev(pool), 0.05)
+    return [
+        1.0 / (1.0 + math.exp(-(CONFIDENCE_GAIN * (s - mean) / spread - CONFIDENCE_OFFSET)))
+        for s in scores
+    ]
 
 
 def _has_filters(filters: MetadataFilters) -> bool:
@@ -219,14 +250,17 @@ def node_personalize(state: GraphState) -> dict:
             "personalization",
             "query names an exact filename — skipped so the named file isn't outranked by unrelated user history",
         )
-        return {"personalized": state["candidates"][:FINAL_RESULT_COUNT]}
+        return {
+            "personalized": state["candidates"][:_result_count()],
+            "pool_scores": [c.score for c in state["candidates"]],
+        }
 
     with trace.stage("personalization"):
         weights = PersonalizationWeights(alpha=LIVE_PERSONALIZATION_ALPHA) if runtime.LIVE else None
         personalized = WeightedSumPersonalizer(weights).rank(
             state["user_id"], state["candidates"], now=state["now"]
         )
-    return {"personalized": personalized[:FINAL_RESULT_COUNT]}
+    return {"personalized": personalized[:_result_count()], "pool_scores": [r.score for r in personalized]}
 
 
 def _tier_after_personalize(state: GraphState) -> str:
@@ -263,13 +297,27 @@ def node_finalize(state: GraphState) -> dict:
         with get_session() as session:
             ids = [r.file_id for r in state["personalized"]]
             records = session.exec(select(FileRecord).where(FileRecord.id.in_(ids))).all()
+            # What the user's own history says about each result, for the UI to show
+            # ("opened 2 days ago") - the same access log personalization ranks with.
+            usage = {
+                file_id: (count, last)
+                for file_id, count, last in session.exec(
+                    select(AccessEvent.file_id, func.count(), func.max(AccessEvent.timestamp))
+                    .where(AccessEvent.user_id == state["user_id"], AccessEvent.file_id.in_(ids))
+                    .group_by(AccessEvent.file_id)
+                ).all()
+            }
         records_by_id = {r.id: r for r in records}
+        confidence = dict(zip(
+            ids, confidences([r.score for r in state["personalized"]], state.get("pool_scores", []))
+        ))
 
         final_results = []
         for r in state["personalized"]:
             rec = records_by_id.get(r.file_id)
             if rec is None:
                 continue
+            open_count, last_opened = usage.get(r.file_id, (0, None))
             final_results.append(
                 {
                     "file_id": r.file_id,
@@ -279,6 +327,9 @@ def node_finalize(state: GraphState) -> dict:
                     "topic_cluster": rec.topic_cluster,
                     "modified_at": rec.modified_at.isoformat(),
                     "score": round(r.score, 4),
+                    "confidence": round(confidence[r.file_id], 3),
+                    "open_count": open_count,
+                    "last_opened": last_opened.isoformat() if last_opened else None,
                     "explanation": state["explanations"].get(r.file_id, r.explanation),
                 }
             )

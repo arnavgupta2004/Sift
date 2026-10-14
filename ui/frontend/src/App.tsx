@@ -7,7 +7,12 @@ import { IndexStatus } from './components/IndexStatus'
 import { PersonalizationPanel } from './components/PersonalizationPanel'
 import { ResultsList } from './components/ResultsList'
 import { TracePanel } from './components/TracePanel'
+import { Logo } from './components/Logo'
+import { Spotlight } from './spotlight/Spotlight'
 import type { ImageHit, PersonalizationInsights, ResultItem, RoutingTraceData, StageTrace, UserSummary } from './types'
+
+// Shortcut hints use the keys printed on this keyboard.
+const MOD_KEY = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl '
 
 const EXAMPLE_QUERIES = [
   'Find my latest presentation',
@@ -17,14 +22,29 @@ const EXAMPLE_QUERIES = [
 
 type Mode = 'files' | 'images'
 
+// How this window was launched. The system-wide shortcut opens `/quick-search` in a small
+// app window that shows only the quick search; `?q=` (and `&mode=images`) runs a search
+// on load, which is how the quick search hands over to this full page.
+const launch = new URLSearchParams(window.location.search)
+const STANDALONE = window.location.pathname === '/quick-search' || launch.has('spotlight')
+const INITIAL_QUERY = launch.get('q') ?? ''
+const INITIAL_MODE: Mode = launch.get('mode') === 'images' ? 'images' : 'files'
+
+function closeSpotlightWindow() {
+  window.close()
+  // Browsers only let a page close a window they opened themselves; if this one stays
+  // open, turn it into the full app instead of leaving an empty frame behind.
+  window.setTimeout(() => window.location.assign('/'), 150)
+}
+
 const EXAMPLE_IMAGE_QUERIES = ['a person smiling', 'a screenshot of code', 'a whiteboard with equations']
 
 function App() {
-  const [mode, setMode] = useState<Mode>('files')
+  const [mode, setMode] = useState<Mode>(INITIAL_MODE)
   const [imageHits, setImageHits] = useState<ImageHit[]>([])
   const [imagesSearched, setImagesSearched] = useState(false)
   const [me, setMe] = useState<UserSummary | null>(null)
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(INITIAL_QUERY)
 
   const [tier, setTier] = useState<string | null>(null)
   const [rationale, setRationale] = useState('')
@@ -39,11 +59,28 @@ function App() {
   const [apiError, setApiError] = useState<string | null>(null)
 
   const cancelRef = useRef<(() => void) | null>(null)
+  const [spotlightOpen, setSpotlightOpen] = useState(false)
+  const [insightsVersion, setInsightsVersion] = useState(0)
+  const ranInitialQuery = useRef(false)
 
+  // The server may still be starting (the shortcut starts it on demand), so keep asking.
   useEffect(() => {
-    getMe()
-      .then(setMe)
-      .catch(() => setApiError('Sift cannot connect right now. Please make sure the Sift service is running, then refresh this page.'))
+    let timer: number | undefined
+    let tries = 0
+    function ask() {
+      getMe()
+        .then((user) => {
+          setMe(user)
+          setApiError(null)
+        })
+        .catch(() => {
+          tries++
+          if (tries === 3) setApiError('Sift cannot connect right now. Please make sure the Sift service is running.')
+          timer = window.setTimeout(ask, 2000)
+        })
+    }
+    ask()
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {
@@ -53,9 +90,33 @@ function App() {
       .then(setInsights)
       .catch(() => setInsights(null))
       .finally(() => setInsightsLoading(false))
-  }, [me, results])
+  }, [me, results, insightsVersion])
 
-  function runImageQuery() {
+  // ⌘K / Ctrl+K opens the Spotlight-style quick search over this page.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSpotlightOpen((open) => !open)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  function showInFullView(q: string, m: Mode) {
+    if (STANDALONE) {
+      window.open(`/?${new URLSearchParams({ q, mode: m })}`, '_blank')
+      closeSpotlightWindow()
+      return
+    }
+    setSpotlightOpen(false)
+    setMode(m)
+    setQuery(q)
+    search(q, m)
+  }
+
+  function runImageQuery(query: string) {
     if (!query.trim()) return
     setIsStreaming(true)
     setApiError(null)
@@ -70,7 +131,11 @@ function App() {
   }
 
   function runQuery() {
-    if (mode === 'images') return runImageQuery()
+    search(query, mode)
+  }
+
+  function search(query: string, mode: Mode) {
+    if (mode === 'images') return runImageQuery(query)
     if (me === null || !query.trim()) return
     cancelRef.current?.()
 
@@ -108,14 +173,39 @@ function App() {
     )
   }
 
+  // A search passed in the address (?q=) runs once the user is known.
+  useEffect(() => {
+    if (STANDALONE || me === null || !INITIAL_QUERY || ranInitialQuery.current) return
+    ranInitialQuery.current = true
+    window.history.replaceState(null, '', '/')
+    search(INITIAL_QUERY, INITIAL_MODE)
+  })
+
+  if (STANDALONE) {
+    return (
+      <Spotlight
+        standalone
+        me={me}
+        insights={insights}
+        insightsLoading={insightsLoading}
+        onOpened={() => setInsightsVersion((v) => v + 1)}
+        onClose={closeSpotlightWindow}
+        onShowInFull={showInFullView}
+      />
+    )
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="brand-mark" aria-hidden="true">S</div>
+        <div className="brand-mark"><Logo size={26} /></div>
         <div>
           <h1>Sift</h1>
           <p className="app-subtitle">Find the right file, even when you only remember part of it.</p>
         </div>
+        <button className="spotlight-launch" onClick={() => setSpotlightOpen(true)} title="Quick search (⌘K / Ctrl+K)">
+          Quick search <kbd>{MOD_KEY}K</kbd>
+        </button>
       </header>
 
       {apiError && <div className="error-banner">{apiError}</div>}
@@ -133,7 +223,7 @@ function App() {
           ))}
         </div>
         <div className="query-bar">
-          <span className="search-icon" aria-hidden="true">⌕</span>
+          <svg className="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
           <input
             className="query-input"
             value={query}
@@ -169,7 +259,7 @@ function App() {
                   <h2>{isStreaming ? 'Looking through your pictures…' : imageHits.length ? 'Matching images' : 'Describe a picture'}</h2>
                   <p>{lastQuery && imagesSearched && !isStreaming ? `Images matching “${lastQuery}”` : 'Sift compares your words to what is in each image, not its file name.'}</p>
                 </div>
-                {imageHits.length > 0 && <span className="results-count">{imageHits.length} found</span>}
+                {imageHits.length > 0 && <span className="results-count">{imageHits.length} {imageHits.length === 1 ? 'image' : 'images'}</span>}
               </div>
               <ImageResults hits={imageHits} userId={me?.id ?? 0} searched={imagesSearched} />
             </section>
@@ -180,7 +270,7 @@ function App() {
                 <h2>{isStreaming ? 'Looking through your files…' : results.length ? 'Recommended files' : 'Your recommendations will appear here'}</h2>
                 <p>{lastQuery && !isStreaming ? `Results for “${lastQuery}”` : 'Search by what you remember — Sift handles the rest.'}</p>
               </div>
-              {results.length > 0 && <span className="results-count">{results.length} found</span>}
+              {results.length > 0 && <span className="results-count">{results.length} {results.length === 1 ? 'match' : 'matches'}</span>}
             </div>
             <ResultsList results={results} userId={me?.id ?? 0} query={lastQuery} />
           </section>
@@ -188,7 +278,7 @@ function App() {
 
           {mode === 'files' && (tier || finalTrace) && (
             <details className="advanced-details">
-              <summary>How Sift found these files</summary>
+              <summary>How Sift searched</summary>
               <p>This is the technical search path used for this request.</p>
               <TracePanel
                 tier={tier}
@@ -205,6 +295,17 @@ function App() {
           <PersonalizationPanel insights={insights} loading={insightsLoading} />
         </aside>
       </div>
+
+      {spotlightOpen && (
+        <Spotlight
+          me={me}
+          insights={insights}
+          insightsLoading={insightsLoading}
+          onOpened={() => setInsightsVersion((v) => v + 1)}
+          onClose={() => setSpotlightOpen(false)}
+          onShowInFull={showInFullView}
+        />
+      )}
     </div>
   )
 }

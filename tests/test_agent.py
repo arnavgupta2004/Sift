@@ -117,6 +117,19 @@ class TestGraphEndToEnd:
         skipped = {s["name"]: s["detail"] for s in out["routing_trace"]["stages"] if s["skipped"]}
         assert "Images view" in skipped["image_search"]
 
+    def test_live_mode_returns_top_five_with_spread_out_confidence(self, monkeypatch):
+        monkeypatch.setattr(runtime, "LIVE", True)
+        out = run_query("find my recent notes about transformers", _first_user_id())
+        results = out["results"]
+        assert len(results) == 5
+        conf = [r["confidence"] for r in results]
+        assert conf == sorted(conf, reverse=True)
+        assert all(0.0 <= c <= 1.0 for c in conf)
+        assert conf[0] - conf[-1] > 0.15  # raw scores alone sit within a few points of each other
+        for r in results:
+            assert r["open_count"] >= 0
+            assert (r["last_opened"] is None) == (r["open_count"] == 0)
+
     def test_deep_route_runs_full_pipeline(self):
         out = run_query(
             "find that thing I was working on with my advisor about audio deepfakes a few weeks ago",
@@ -156,3 +169,24 @@ class TestGraphEndToEnd:
         skipped = {s["name"] for s in out["routing_trace"]["stages"] if s["skipped"]}
         assert "metadata_search" in skipped
         assert "personalization" in skipped
+
+
+class TestConfidence:
+    def test_a_clear_winner_reads_far_above_a_pack_of_near_equals(self):
+        from app.agent.graph import confidences
+
+        pool = [1.0, 0.55, 0.5, 0.48, 0.45] + [0.4 - 0.02 * i for i in range(15)]
+        conf = confidences(pool[:5], pool)
+        assert conf[0] > 0.95 and conf[1] < 0.7
+
+    def test_compressed_scores_are_spread_out(self):
+        from app.agent.graph import confidences
+
+        pool = [61 / (60 + rank) for rank in range(1, 21)]  # one RRF list: #1 and #5 within 7%
+        conf = confidences(pool[:5], pool)
+        assert conf[0] - conf[4] > 0.2
+
+    def test_too_few_candidates_fall_back_to_the_raw_score(self):
+        from app.agent.graph import confidences
+
+        assert confidences([1.0, 0.4], [1.0, 0.4]) == [1.0, 0.4]

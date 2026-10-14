@@ -1,0 +1,14 @@
+{
+  "name": "Sift",
+  "short_name": "Sift",
+  "description": "Find the right file on this computer, even when you only remember part of it.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f131c",
+  "theme_color": "#0f131c",
+  "icons": [
+    { "src": "/favicon.svg?v=3", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/icon-192.png?v=3", "type": "image/png", "sizes": "192x192" },
+    { "src": "/icon-512.png?v=3", "type": "image/png", "sizes": "512x512" }
+  ]
+}

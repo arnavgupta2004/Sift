@@ -466,55 +466,106 @@ def ensure_owner(db_path: Path = DEFAULT_DB_PATH) -> int:
         return user.id
 
 
-def seed_from_spotlight(user_id: int, db_path: Path = DEFAULT_DB_PATH, days: int = 90, cap: int = 3000) -> int:
-    """Cold start for personalization (macOS): Spotlight already knows which files this
-    person actually opened recently and how often. Seeds one-time access events from
-    that, so the profile reflects real habits from the first search. Everywhere else the
-    profile starts empty and learns from files opened/rated through Sift."""
-    if sys.platform != "darwin":
-        return 0
-    engine = get_engine(db_path)
-    with Session(engine) as s:
-        if s.exec(select(func.count()).select_from(AccessEvent).where(
-            AccessEvent.user_id == user_id, AccessEvent.session_id.like("spotlight-%")
-        )).one():
-            return 0
+def _spotlight_history(days: int, cap: int) -> list[tuple[str, datetime, int]]:
+    """macOS: Spotlight's record of when each file was last used and how often."""
     try:
         out = subprocess.run(
             ["mdfind", "-onlyin", str(Path.home()), f"kMDItemLastUsedDate >= $time.today(-{days})"],
             capture_output=True, text=True, timeout=120,
         ).stdout
     except Exception:
-        return 0
+        return []
     paths = [p for p in out.splitlines() if p][: cap * 3]
 
-    events = 0
-    with Session(engine) as s:
-        for i in range(0, len(paths), 100):
-            chunk = paths[i:i + 100]
-            id_by_path = dict(s.exec(select(FileRecord.path, FileRecord.id).where(FileRecord.path.in_(chunk))).all())
-            if not id_by_path:
+    history = []
+    for i in range(0, len(paths), 100):
+        chunk = paths[i:i + 100]
+        try:
+            raw = subprocess.run(
+                ["mdls", "-raw", "-name", "kMDItemLastUsedDate", "-name", "kMDItemUseCount", *chunk],
+                capture_output=True, text=True, timeout=60,
+            ).stdout.split("\0")
+        except Exception:
+            continue
+        for j, p in enumerate(chunk):
+            if len(raw) < 2 * j + 2:
                 continue
             try:
-                raw = subprocess.run(
-                    ["mdls", "-raw", "-name", "kMDItemLastUsedDate", "-name", "kMDItemUseCount", *chunk],
-                    capture_output=True, text=True, timeout=60,
-                ).stdout.split("\0")
-            except Exception:
+                used = datetime.strptime(raw[2 * j].strip()[:19], "%Y-%m-%d %H:%M:%S")
+                count = int(raw[2 * j + 1]) if raw[2 * j + 1].strip() not in ("", "(null)") else 1
+            except ValueError:
                 continue
-            for j, p in enumerate(chunk):
-                if p not in id_by_path or len(raw) < 2 * j + 2:
-                    continue
-                try:
-                    used = datetime.strptime(raw[2 * j].strip()[:19], "%Y-%m-%d %H:%M:%S")
-                    count = int(raw[2 * j + 1]) if raw[2 * j + 1].strip() not in ("", "(null)") else 1
-                except ValueError:
+            history.append((p, used, count))
+    return history
+
+
+def _recently_used_xbel(days: int, xbel: Path | None = None) -> list[tuple[str, datetime, int]]:
+    """Linux: the freedesktop recent-files list (~/.local/share/recently-used.xbel) that
+    GNOME, KDE and most GTK/Qt apps write every time a file is opened."""
+    import xml.etree.ElementTree as ET
+    from urllib.parse import unquote, urlparse
+
+    xbel = xbel or Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "recently-used.xbel"
+    try:
+        root = ET.parse(xbel).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    cutoff = datetime.now() - timedelta(days=days)
+    ns = "{http://www.freedesktop.org/standards/desktop-bookmarks}"
+
+    history = []
+    for bm in root.iter("bookmark"):
+        uri = urlparse(bm.get("href", ""))
+        if uri.scheme != "file":
+            continue
+        stamp = bm.get("visited") or bm.get("modified") or ""
+        try:
+            # UTC ("...Z") -> naive local time, like every other timestamp in the DB
+            used = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
+        except ValueError:
+            continue
+        if used < cutoff:
+            continue
+        count = sum(int(a.get("count") or 1) for a in bm.iter(f"{ns}application")) or 1
+        history.append((unquote(uri.path), used, count))
+    return history
+
+
+def seed_from_recent_history(user_id: int, db_path: Path = DEFAULT_DB_PATH, days: int = 90, cap: int = 3000) -> int:
+    """Cold start for personalization: the OS already knows which files this person
+    opened recently and how often (Spotlight on macOS, recently-used.xbel on Linux).
+    Seeds one-time access events from that, so the profile reflects real habits from
+    the first search. Elsewhere the profile starts empty and learns from files
+    opened/rated through Sift."""
+    if sys.platform == "darwin":
+        source, history = "spotlight", lambda: _spotlight_history(days, cap)
+    elif sys.platform.startswith("linux"):
+        source, history = "recent", lambda: _recently_used_xbel(days)
+    else:
+        return 0
+    engine = get_engine(db_path)
+    with Session(engine) as s:
+        if s.exec(select(func.count()).select_from(AccessEvent).where(
+            AccessEvent.user_id == user_id, AccessEvent.session_id.like(f"{source}-%")
+        )).one():
+            return 0
+
+    entries = history()
+    events = 0
+    with Session(engine) as s:
+        for i in range(0, len(entries), 100):
+            chunk = entries[i:i + 100]
+            id_by_path = dict(s.exec(select(FileRecord.path, FileRecord.id).where(
+                FileRecord.path.in_([p for p, _, _ in chunk])
+            )).all())
+            for p, used, count in chunk:
+                if p not in id_by_path:
                     continue
                 for k in range(max(1, min(count, 10))):
                     s.add(AccessEvent(
                         user_id=user_id, file_id=id_by_path[p], action="open",
                         timestamp=used - timedelta(hours=k),
-                        session_id=f"spotlight-{id_by_path[p]}-{k}",
+                        session_id=f"{source}-{id_by_path[p]}-{k}",
                     ))
                     events += 1
             if events >= cap * 3:
@@ -579,7 +630,7 @@ class Indexer:
                 sweep(self.roots, self.status, self._stop, self.db_path)
                 if not seeded:
                     seeded = True
-                    seed_from_spotlight(owner, self.db_path)
+                    seed_from_recent_history(owner, self.db_path)
                 self.status.phase = "reading"
                 process_pending(self.status, self._stop, self.db_path, self.embed)
                 self.status.phase = "idle"

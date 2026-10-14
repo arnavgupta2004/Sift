@@ -29,6 +29,9 @@ export interface ResultItem {
   topic_cluster: string
   modified_at: string
   score: number
+  confidence: number
+  open_count: number
+  last_opened: string | null
   explanation: string
 }
 
@@ -52,8 +55,17 @@ export interface TopFile {
   frequency: number
 }
 
+export interface SuggestedFile {
+  file_id: number
+  filename: string
+  path: string
+  file_type: string
+  reason: 'usual_now' | 'recent'
+}
+
 export interface PersonalizationInsights {
   preferred_file_types: string[]
+  suggested_files: SuggestedFile[]
   top_files_by_frequency: TopFile[]
   recurring_patterns: RecurringPattern[]
   active_context_boost_now: boolean
