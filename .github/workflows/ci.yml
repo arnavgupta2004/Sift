@@ -91,6 +91,11 @@ jobs:
           cache: "npm"
           cache-dependency-path: ui/frontend/package-lock.json
 
+      # lightgbm's macOS wheel links against libomp, which the runner doesn't ship.
+      - name: Install libomp (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libomp
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
