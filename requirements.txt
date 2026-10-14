@@ -36,6 +36,7 @@ httpx==0.28.1
 
 # Utilities
 python-dotenv==1.2.4
+pynput==1.8.1  # system-wide quick-search shortcut (app/launcher.py)
 
 # Synthetic corpus file generation (real .docx/.xlsx/.pptx/.pdf/.png on disk)
 python-docx==1.2.0
