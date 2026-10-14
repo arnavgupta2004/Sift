@@ -116,35 +116,6 @@ jobs:
           python data/generate_synthetic_data.py
           python eval/build_eval_set.py
 
-      - name: TEMP ranking diagnostics (macOS)
-        if: runner.os == 'macOS'
-        continue-on-error: true
-        run: |
-          python - <<'EOF'
-          import sys, platform
-          sys.path[:0] = [".", "tests"]
-          import torch
-          print("platform", platform.platform(), "torch", torch.__version__,
-                "mps", torch.backends.mps.is_available(), "threads", torch.get_num_threads())
-          from app import runtime
-          runtime.LIVE = True
-          from app.agent import graph
-          from app.agent.graph import run_query
-          import test_agent
-          orig = graph.confidences
-          def spy(scores, pool):
-              print("scores", [round(s, 4) for s in scores])
-              print("pool n", len(pool), "pool", [round(p, 4) for p in sorted(pool, reverse=True)[:12]])
-              return orig(scores, pool)
-          graph.confidences = spy
-          out = run_query("find my recent notes about transformers", test_agent._first_user_id())
-          for r in out["results"]:
-              print(round(r["confidence"], 3), r["filename"])
-          for s in out["routing_trace"]["stages"]:
-              print("stage", s["name"], "skipped" if s["skipped"] else "ran", (s.get("detail") or "")[:120])
-          EOF
-          pytest -q tests/test_agent.py -k spread_out_confidence || true
-
       - name: Run tests
         run: pytest -q
 
