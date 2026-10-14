@@ -1,0 +1,158 @@
+/* Spotlight pop-up. Colors and fonts come from the page's tokens (index.css); the
+   tokens below are the pop-up's own (frosted glass, hairlines, the floating shadow).
+   Every rule is scoped to .spotlight-overlay so it never restyles the main page,
+   which shares some class names (.panel, .feedback-btn, ...). */
+.spotlight-overlay {
+  --glass: rgba(255, 255, 255, 0.93);
+  --glass-solid: #ffffff;
+  --hairline: rgba(24, 32, 51, 0.08);
+  --row-hover: rgba(24, 32, 51, 0.04);
+  --scrim: rgba(17, 22, 34, 0.32);
+  --float-shadow: 0 0 0 1px rgba(24, 32, 51, 0.08), 0 30px 80px rgba(17, 22, 34, 0.28), 0 8px 20px rgba(17, 22, 34, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .spotlight-overlay {
+    --glass: rgba(26, 32, 45, 0.95);
+    --glass-solid: #1a202d;
+    --hairline: rgba(255, 255, 255, 0.07);
+    --row-hover: rgba(255, 255, 255, 0.04);
+    --scrim: rgba(4, 6, 12, 0.55);
+    --float-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 30px 80px rgba(0, 0, 0, 0.6);
+  }
+}
+
+.spotlight-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 13vh 16px 32px;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  color: var(--text);
+  font-family: var(--font-ui);
+  animation: sl-fade 0.14s ease-out;
+}
+@keyframes sl-fade { from { opacity: 0; } }
+@keyframes sl-rise { from { opacity: 0; transform: translateY(6px) scale(0.99); } }
+
+/* Opened by the system shortcut: the pop-up is the whole (small) window. */
+.spotlight-overlay.standalone { padding: 0; background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; }
+.spotlight-overlay.standalone .spotlight { width: 100%; height: 100%; max-width: none; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; animation: none; }
+.spotlight-overlay.standalone .sl-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.spotlight-overlay.standalone .sl-split { flex: 1; height: auto; min-height: 0; }
+
+.spotlight-overlay kbd { font-family: var(--font-ui); font-size: 0.68rem; font-weight: 500; line-height: 1; padding: 3px 5px; border-radius: 4px; border: 1px solid var(--border); border-bottom-width: 2px; background: var(--glass-solid); color: var(--text-muted); }
+
+/* --- window ------------------------------------------------------------------ */
+.spotlight-overlay .spotlight { width: min(780px, 100%); background: var(--glass); backdrop-filter: blur(30px) saturate(170%); -webkit-backdrop-filter: blur(30px) saturate(170%); border-radius: 16px; box-shadow: var(--float-shadow); overflow: hidden; animation: sl-rise 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+.spotlight-overlay .sl-bar { display: flex; align-items: center; gap: 14px; padding: 14px 16px 14px 20px; }
+.spotlight-overlay .sl-mark { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--logo-tile); }
+.spotlight-overlay .sl-input { flex: 1; min-width: 0; border: 0; outline: 0; box-shadow: none; background: transparent; color: var(--text); font-family: var(--font-ui); font-size: 1.5rem; font-weight: 400; letter-spacing: -0.015em; padding: 4px 0; }
+.spotlight-overlay .sl-input::placeholder { color: var(--text-faint); }
+.spotlight-overlay .sl-spinner { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--hairline); border-top-color: var(--accent); animation: sl-spin 0.7s linear infinite; }
+@keyframes sl-spin { to { transform: rotate(360deg); } }
+.spotlight-overlay .sl-mode { flex: none; display: inline-flex; padding: 3px; border-radius: 9px; background: var(--code-bg); }
+.spotlight-overlay .sl-mode button { border: 0; background: transparent; color: var(--text-muted); font-size: 0.75rem; font-weight: 500; padding: 4px 11px; border-radius: 6px; cursor: pointer; transition: color 0.12s; }
+.spotlight-overlay .sl-mode button:hover { color: var(--text); }
+.spotlight-overlay .sl-mode button.active { background: var(--glass-solid); color: var(--text); box-shadow: var(--shadow-sm); }
+
+.spotlight-overlay .sl-banner { margin: 0 16px 12px; padding: 9px 12px; border-radius: 9px; font-size: var(--fs-sm); }
+.spotlight-overlay .sl-banner.error { background: var(--danger-soft); color: var(--danger); }
+
+.spotlight-overlay .sl-body { border-top: 1px solid var(--hairline); }
+.spotlight-overlay .sl-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); height: 440px; }
+
+/* --- result list ------------------------------------------------------------- */
+.spotlight-overlay .sl-list { list-style: none; margin: 0; padding: 6px 8px 12px; overflow-y: auto; border-right: 1px solid var(--hairline); }
+.spotlight-overlay .sl-section { padding: 12px 10px 5px; font-size: 0.69rem; font-weight: 500; letter-spacing: 0.02em; color: var(--text-faint); }
+.spotlight-overlay .sl-row { display: flex; align-items: center; gap: 11px; padding: 7px 10px; border-radius: 9px; cursor: default; user-select: none; }
+.spotlight-overlay .sl-row:not(.selected):hover { background: var(--row-hover); }
+.spotlight-overlay .sl-row.selected { background: var(--accent); color: var(--on-accent); }
+.spotlight-overlay .sl-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.spotlight-overlay .sl-row-name, .spotlight-overlay .sl-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spotlight-overlay .sl-row-name { font-size: 0.875rem; font-weight: 500; }
+.spotlight-overlay .sl-row-sub { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-faint); }
+.spotlight-overlay .sl-row.selected .sl-row-sub { color: inherit; opacity: 0.75; }
+
+.spotlight-overlay .sl-conf { flex: none; min-width: 40px; text-align: center; font-size: 0.7rem; font-variant-numeric: tabular-nums; font-weight: 600; padding: 3px 6px; border-radius: 6px; }
+.spotlight-overlay .conf-strong.sl-conf { color: var(--success); background: var(--success-soft); }
+.spotlight-overlay .conf-good.sl-conf { color: var(--accent); background: var(--accent-soft); }
+.spotlight-overlay .conf-possible.sl-conf { color: var(--warning); background: var(--warning-soft); }
+.spotlight-overlay .conf-weak.sl-conf { color: var(--text-muted); background: var(--code-bg); }
+.spotlight-overlay .sl-row.selected .sl-conf { color: inherit; background: color-mix(in srgb, var(--on-accent) 18%, transparent); }
+
+/* --- preview pane ------------------------------------------------------------ */
+.spotlight-overlay .sl-preview { overflow-y: auto; padding: 20px 22px 16px; display: flex; flex-direction: column; gap: 14px; background: color-mix(in srgb, var(--glass-solid) 40%, transparent); }
+.spotlight-overlay .sl-preview-hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--hairline); }
+.spotlight-overlay .sl-preview-hero h3 { margin: 4px 0 0; font-size: 1.02rem; font-weight: 500; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.spotlight-overlay .sl-preview-note { margin: 0; font-size: var(--fs-sm); color: var(--text-muted); }
+.spotlight-overlay .sl-meter { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.spotlight-overlay .sl-meter-track { width: 168px; height: 4px; border-radius: 99px; background: var(--code-bg); overflow: hidden; }
+.spotlight-overlay .sl-meter-track span { display: block; height: 100%; border-radius: 99px; background: var(--text-faint); }
+.spotlight-overlay .conf-strong .sl-meter-track span { background: var(--success); }
+.spotlight-overlay .conf-good .sl-meter-track span { background: var(--accent); }
+.spotlight-overlay .conf-possible .sl-meter-track span { background: var(--warning); }
+
+.spotlight-overlay .sl-facts { margin: 0; display: grid; gap: 7px; font-size: var(--fs-sm); }
+.spotlight-overlay .sl-facts div { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.spotlight-overlay .sl-facts dt { color: var(--text-faint); text-align: right; font-size: 0.75rem; }
+.spotlight-overlay .sl-facts dd { margin: 0; overflow-wrap: anywhere; }
+.spotlight-overlay .sl-facts div:last-child dd { font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.spotlight-overlay .sl-personal { margin: 0; font-size: 0.78rem; color: var(--accent); background: var(--accent-soft); padding: 8px 11px; border-radius: 9px; }
+.spotlight-overlay .sl-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; }
+.spotlight-overlay .sl-open { display: inline-flex; align-items: center; gap: 9px; border: 0; border-radius: 8px; padding: 7px 14px; background: var(--accent); color: var(--on-accent); font-size: var(--fs-sm); font-weight: 500; cursor: pointer; transition: background 0.12s; }
+.spotlight-overlay .sl-open:hover { background: var(--accent-hover); }
+.spotlight-overlay .sl-open kbd { border-color: color-mix(in srgb, var(--on-accent) 35%, transparent); background: color-mix(in srgb, var(--on-accent) 15%, transparent); color: inherit; }
+.spotlight-overlay .feedback-buttons { display: flex; gap: 4px; }
+.spotlight-overlay .feedback-btn { display: grid; place-items: center; border: 1px solid var(--border); background: var(--glass-solid); color: var(--text-muted); border-radius: 8px; width: 30px; height: 30px; cursor: pointer; transition: color 0.12s, border-color 0.12s; }
+.spotlight-overlay .feedback-btn:hover, .spotlight-overlay .feedback-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.spotlight-overlay .feedback-btn svg { width: 14px; height: 14px; }
+.spotlight-overlay .sl-why summary { font-size: 0.75rem; color: var(--text-faint); cursor: pointer; }
+.spotlight-overlay .sl-why summary:hover { color: var(--text-muted); }
+.spotlight-overlay .sl-why p { margin: 7px 0 0; font-size: 0.7rem; line-height: 1.55; color: var(--text-muted); background: var(--code-bg); border-radius: 7px; padding: 8px 10px; overflow-wrap: anywhere; font-family: var(--font-mono); }
+
+/* personalization panel, shown in the preview pane when the search box is empty */
+.spotlight-overlay .sl-preview .panel { padding: 0; border: 0; background: none; box-shadow: none; }
+
+/* --- empty states, images, footer --------------------------------------------- */
+.spotlight-overlay .sl-empty { margin: 0; padding: 30px 24px 32px; text-align: center; color: var(--text-muted); font-size: 0.875rem; }
+.spotlight-overlay .sl-empty p { margin: 0; }
+.spotlight-overlay .sl-examples { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.spotlight-overlay .sl-chip { background: var(--glass-solid); color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 0.77rem; cursor: pointer; transition: color 0.12s, border-color 0.12s; }
+.spotlight-overlay .sl-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+.spotlight-overlay .image-grid { list-style: none; margin: 0; padding: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; max-height: 420px; overflow-y: auto; }
+.spotlight-overlay .image-tile { width: 100%; display: flex; flex-direction: column; gap: 6px; padding: 5px; background: transparent; border: 0; border-radius: 11px; cursor: default; color: var(--text); text-align: left; }
+.spotlight-overlay .image-tile:not(.selected):hover { background: var(--row-hover); }
+.spotlight-overlay .image-tile.selected { background: var(--accent); color: var(--on-accent); }
+.spotlight-overlay .image-tile img { width: 100%; max-width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--code-bg); }
+.spotlight-overlay .image-tile span { font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.spotlight-overlay .sl-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 16px 9px 20px; border-top: 1px solid var(--hairline); font-size: 0.72rem; color: var(--text-faint); }
+.spotlight-overlay .sl-hints { display: flex; align-items: center; gap: 14px; flex: none; }
+.spotlight-overlay .sl-hints span { display: inline-flex; gap: 4px; align-items: center; }
+.spotlight-overlay .sl-link { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; font-weight: 500; cursor: pointer; }
+.spotlight-overlay .index-status { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: inherit; color: inherit; }
+.spotlight-overlay .index-status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spotlight-overlay .index-status-bar { flex: none; width: 64px; height: 3px; }
+
+/* --- narrow screens: preview goes under the list -------------------------------- */
+@media (max-width: 680px) {
+  .spotlight-overlay { padding-top: 16px; }
+  .spotlight-overlay .sl-input { font-size: 1.2rem; }
+  .spotlight-overlay .sl-split { grid-template-columns: 1fr; height: auto; }
+  .spotlight-overlay .sl-list { border-right: 0; border-bottom: 1px solid var(--hairline); max-height: 300px; }
+  .spotlight-overlay .sl-hints span { display: none; }
+  .spotlight-overlay .sl-footer { flex-wrap: wrap; }
+}
+
+/* The button on the main page that opens the pop-up. */
+.spotlight-launch { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-bg); color: var(--text-muted); font-size: var(--fs-sm); cursor: pointer; box-shadow: var(--shadow-sm); transition: color 0.12s, border-color 0.12s; }
+.spotlight-launch:hover { color: var(--text); border-color: var(--border-strong); }
+.spotlight-launch kbd { font-family: var(--font-ui); font-size: 0.7rem; font-weight: 500; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border); background: var(--code-bg); color: var(--text-muted); }

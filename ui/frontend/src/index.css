@@ -1,42 +1,74 @@
+/* Sift: a quiet, Finder-like workspace. Cool slate neutrals biased toward the
+   accent, one confident blue for actions. Google Sans for the interface,
+   Google Sans Code for file paths. */
 :root {
-  --bg: #f7f8ff;
-  --panel-bg: rgba(255, 255, 255, 0.88);
-  --border: rgba(102, 110, 166, 0.16);
-  --text: #1e2542;
-  --text-muted: #66708b;
-  --accent: #5965d9;
-  --accent-soft: #edf0ff;
-  --success: #1a9e6b;
-  --success-soft: #eafaf3;
-  --warning: #b7791f;
-  --warning-soft: #fdf3e3;
-  --danger: #d1414a;
-  --danger-soft: #fcedee;
-  --code-bg: #f2f4fc;
-  --shadow-sm: 0 10px 32px rgba(56, 68, 127, 0.07);
-  --shadow-md: 0 18px 44px rgba(56, 68, 127, 0.12);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-  color-scheme: light dark;
+  --bg: #f3f5f9;
+  --bg-wash: #e6ebf5;
+  --panel-bg: #ffffff;
+  --panel-raised: #fbfcfe;
+  --border: #dde3ee;
+  --border-strong: #c9d2e2;
+  --text: #182033;
+  --text-muted: #5b6579;
+  --text-faint: #8a93a6;
+  --accent: #3157d5;
+  --accent-hover: #2647b8;
+  --accent-soft: #e9eefc;
+  --on-accent: #ffffff;
+  --success: #17804f;
+  --success-soft: #e3f4eb;
+  --warning: #a8620b;
+  --warning-soft: #fbf0df;
+  --danger: #c23434;
+  --danger-soft: #fbe9e9;
+  --code-bg: #eef1f7;
+  --focus-ring: 0 0 0 3px rgba(49, 87, 213, 0.28);
+  --logo-tile: #0d0f14;
+  --logo-ink: #f7f8fa;
+  --shadow-sm: 0 1px 2px rgba(24, 32, 51, 0.05), 0 1px 1px rgba(24, 32, 51, 0.03);
+  --shadow-md: 0 8px 24px rgba(24, 32, 51, 0.08), 0 1px 2px rgba(24, 32, 51, 0.05);
+
+  --font-ui: 'Google Sans Variable', 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Google Sans Code', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Mono', 'Roboto Mono', monospace;
+  /* type scale */
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.8125rem;
+  --fs-md: 0.9375rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.5rem;
+
+  font-family: var(--font-ui);
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111525;
-    --panel-bg: rgba(25, 31, 54, 0.87);
-    --border: rgba(177, 190, 255, 0.14);
-    --text: #f2f4ff;
-    --text-muted: #aab2ca;
-    --accent: #9aa5ff;
-    --accent-soft: #252c52;
-    --success: #3ecb92;
-    --success-soft: #133228;
-    --warning: #e0af5a;
-    --warning-soft: #3a2c12;
-    --danger: #ea7b81;
-    --danger-soft: #3a1e20;
-    --code-bg: #202744;
-    --shadow-sm: 0 10px 32px rgba(0, 0, 0, 0.24);
-    --shadow-md: 0 18px 44px rgba(0, 0, 0, 0.32);
+  :root:not([data-theme="light"]) {
+    --bg: #0f131c;
+    --bg-wash: #151c2b;
+    --panel-bg: #171d29;
+    --panel-raised: #1c2331;
+    --border: #273042;
+    --border-strong: #354055;
+    --text: #e9edf5;
+    --text-muted: #a3adc0;
+    --text-faint: #737d91;
+    --accent: #6f8ff5;
+    --accent-hover: #87a2f8;
+    --accent-soft: #1f2a48;
+    --on-accent: #0b1020;
+    --success: #4fc98a;
+    --success-soft: #15301f;
+    --warning: #e3a447;
+    --warning-soft: #33260f;
+    --danger: #f07a7a;
+    --danger-soft: #3a1b1d;
+    --code-bg: #212938;
+    --focus-ring: 0 0 0 3px rgba(111, 143, 245, 0.35);
+    --logo-tile: #f7f8fa;
+    --logo-ink: #0d0f14;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.35), 0 1px 2px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
   }
 }
 
@@ -47,29 +79,37 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 8% 8%, rgba(143, 164, 255, 0.25), transparent 25rem),
-    radial-gradient(circle at 92% 16%, rgba(197, 160, 255, 0.20), transparent 24rem),
-    radial-gradient(circle at 52% 100%, rgba(125, 209, 200, 0.16), transparent 27rem),
-    var(--bg);
+  background: linear-gradient(180deg, var(--bg-wash) 0, var(--bg) 340px) no-repeat, var(--bg);
   color: var(--text);
+  font-size: var(--fs-md);
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.32;
-  background-image: linear-gradient(rgba(95, 107, 180, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(95, 107, 180, 0.045) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(to bottom, #000, transparent 75%);
+h1, h2, h3 {
+  text-wrap: balance;
+}
+
+button {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 code {
   background: var(--code-bg);
   padding: 0.1em 0.4em;
   border-radius: 4px;
+  font-family: var(--font-mono);
   font-size: 0.9em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
