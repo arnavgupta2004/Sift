@@ -3,6 +3,7 @@
 full-text search over what it read, and the single laptop user."""
 
 import os
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -144,6 +145,7 @@ class TestSingleUser:
             owners = s.exec(select(UserRecord).where(UserRecord.persona_key == "owner")).all()
         assert len(owners) == 1 and owners[0].name
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="file:// URIs in recently-used.xbel only map back to POSIX paths")
     def test_linux_recent_files_seed_the_profile_once(self, env, monkeypatch, tmp_path):
         db, root, status, stop = env
         used = _write(root, "notes/plan.md")
